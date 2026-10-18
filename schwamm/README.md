@@ -5,7 +5,7 @@ Ein nasser Schwamm ist Sensor und Klangquelle zugleich. Drücken macht den Klang
 | Datei | Inhalt |
 |---|---|
 | `schwamm_sensor/schwamm_sensor.ino` | Arduino-Sketch: misst die Leitfähigkeit des Schwamms |
-| `schwamm.py` | Klangverarbeitung in Python: Tropfen/Mikro → Granular → Hall, plus Fenster mit Anzeige |
+| `schwamm.py` | Klangverarbeitung in Python: Tropfen/Mikro → Granular → Hall, plus Anzeige im Browser |
 | `hoerprobe_simulation.wav` | 20 s Hörprobe aus dem Simulationsmodus (ohne Hardware erzeugt) |
 
 ---
@@ -17,7 +17,7 @@ pip install numpy sounddevice
 python schwamm.py
 ```
 
-Es öffnet sich ein Fenster mit Schieberegler („Schwamm drücken“) und Knopf „In Wasser tauchen“. Statt echtem Wasser erklingen synthetische Tropfen. Wenn du länger drückst, sinkt die Nässe, und es wird still.
+Im Browser öffnet sich eine Seite (http://127.0.0.1:8765) mit Schieberegler („Schwamm drücken“) und Knopf „In Wasser tauchen“. Lässt du den Regler los, springt er zurück wie ein Schwamm. Beenden mit Strg+C im Terminal. Statt echtem Wasser erklingen synthetische Tropfen. Wenn du länger drückst, sinkt die Nässe, und es wird still.
 
 ## 2. Teile für den echten Aufbau
 
@@ -78,6 +78,6 @@ Alle Stellschrauben stehen als Zahlen direkt im Code (Klassen `Tropfen`, `Granul
 
 ## 7. Was noch offen ist
 
-- Getestet ist nur die Klangverarbeitung: Sie läuft ohne Soundkarte und etwa 17-mal schneller als Echtzeit. Arduino-Sketch, Sensorauswertung, Fenster und Audio-Ein-/Ausgabe sind ungetestet, weil hier keine Hardware dranhängt.
+- Getestet ist nur die Klangverarbeitung: Sie läuft ohne Soundkarte und etwa 17-mal schneller als Echtzeit. Arduino-Sketch, Sensorauswertung und Audio-Ein-/Ausgabe sind ungetestet, weil hier keine Hardware dranhängt.
 - Wie sich der Widerstand beim Drücken wirklich verhält, muss man ausprobieren. Drücken verdichtet das Wasser (Widerstand sinkt), drückt es aber auch heraus (Widerstand steigt). Falls der Wert beim Drücken fällt statt steigt, im Sketch `return 1023 - …` verwenden oder die Auswertung in `SensorLeser` anpassen.
 - Ideen zum Weiterbauen: mehrere Schwämme als Stimmen, ein Hydrophon im Tauchbecken, sodass auch das Eintauchen klingt, oder ein Wasserbecken mit Pumpe, das sich langsam leert.

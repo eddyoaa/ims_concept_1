@@ -261,48 +261,103 @@ class OscSender:
 # Oberfläche
 # ---------------------------------------------------------------------------
 
-def fenster(zustand, sim, osc):
-    import tkinter as tk
+SEITE = """<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>Schwamm</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light dark; --bg:#f4f4f4; --fg:#111; --leer:#ddd; --voll:#2a7ab0; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1e1e1e; --fg:#eee; --leer:#3a3a3a; --voll:#4aa3df; } }
+  body { background:var(--bg); color:var(--fg); font:16px -apple-system, system-ui, sans-serif;
+         max-width:420px; margin:40px auto; padding:0 16px; }
+  .balken { height:22px; background:var(--leer); border-radius:4px; overflow:hidden; margin:6px 0 18px; }
+  .balken div { height:100%; width:0; background:var(--voll); transition:width .05s; }
+  input[type=range] { width:100%; margin:8px 0 16px; }
+  button { font:inherit; padding:8px 16px; }
+  .klein { opacity:.6; font-size:14px; }
+</style></head><body>
+<h2>Schwamm</h2>
+<div>Druck</div><div class="balken"><div id="druck"></div></div>
+<div>Nässe</div><div class="balken"><div id="nass"></div></div>
+<div id="sim" hidden>
+  <div>Schwamm drücken (Simulation)</div>
+  <input id="regler" type="range" min="0" max="100" value="0">
+  <button id="tauchen">In Wasser tauchen</button>
+</div>
+<p class="klein" id="roh"></p>
+<script>
+  const regler = document.getElementById('regler');
+  regler.oninput = () => fetch('/regler?v=' + regler.value / 100);
+  // Beim Loslassen springt der Regler zurück, wie ein Schwamm
+  regler.onpointerup = () => { regler.value = 0; regler.oninput(); };
+  document.getElementById('tauchen').onclick = () => fetch('/eintauchen');
+  async function tick() {
+    try {
+      const z = await (await fetch('/zustand')).json();
+      document.getElementById('druck').style.width = (z.druck * 100) + '%';
+      document.getElementById('nass').style.width = (z.nass * 100) + '%';
+      document.getElementById('sim').hidden = !z.sim;
+      document.getElementById('roh').textContent = z.sim ? '' : 'Sensor roh: ' + z.roh;
+    } catch (e) {}
+    setTimeout(tick, 50);
+  }
+  tick();
+</script></body></html>
+"""
 
-    root = tk.Tk()
-    root.title("Schwamm")
-    root.configure(padx=16, pady=16)
 
-    def balken(text):
-        tk.Label(root, text=text, anchor="w").pack(fill="x")
-        c = tk.Canvas(root, width=300, height=18, bg="#ddd", highlightthickness=0)
-        c.pack(pady=(0, 10))
-        return c, c.create_rectangle(0, 0, 0, 18, fill="#2a7ab0", width=0)
+def oberflaeche(zustand, sim, osc, port=8765):
+    """Kleine Webseite im Browser statt eines Tk-Fensters (Tk zeichnet auf macOS oft leer)."""
+    import json
+    import webbrowser
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from urllib.parse import parse_qs, urlparse
 
-    druck_c, druck_r = balken("Druck")
-    nass_c, nass_r = balken("Nässe")
-    roh_l = tk.Label(root, text="")
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            url = urlparse(self.path)
+            if url.path == "/":
+                self._antwort(SEITE, "text/html; charset=utf-8")
+            elif url.path == "/zustand":
+                self._antwort(json.dumps({"druck": zustand.druck, "nass": zustand.nass,
+                                          "roh": zustand.roh, "sim": sim is not None}),
+                              "application/json")
+            elif url.path == "/regler" and sim:
+                sim.regler = float(parse_qs(url.query).get("v", ["0"])[0])
+                self._antwort("ok", "text/plain")
+            elif url.path == "/eintauchen" and sim:
+                sim.eintauchen()
+                self._antwort("ok", "text/plain")
+            else:
+                self.send_error(404)
 
-    if sim:
-        tk.Label(root, text="Schwamm drücken (Simulation)", anchor="w").pack(fill="x")
-        regler = tk.Scale(root, from_=0, to=100, orient="horizontal", length=300,
-                          command=lambda v: setattr(sim, "regler", float(v) / 100))
-        regler.pack()
-        tk.Button(root, text="In Wasser tauchen", command=sim.eintauchen).pack(pady=8)
-    else:
-        roh_l.pack()
+        def _antwort(self, text, typ):
+            daten = text.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", typ)
+            self.send_header("Content-Length", str(len(daten)))
+            self.end_headers()
+            self.wfile.write(daten)
 
-    letzte = [time.time()]
+        def log_message(self, *args):
+            pass
 
-    def tick():
-        jetzt = time.time()
-        if sim:
-            sim.schritt(jetzt - letzte[0])
-        letzte[0] = jetzt
-        druck_c.coords(druck_r, 0, 0, 300 * zustand.druck, 18)
-        nass_c.coords(nass_r, 0, 0, 300 * zustand.nass, 18)
-        roh_l.config(text=f"Sensor roh: {zustand.roh}")
-        osc.senden(zustand)
-        root.after(33, tick)
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    adresse = f"http://127.0.0.1:{port}"
+    print(f"Oberfläche: {adresse}  (beenden mit Strg+C)")
+    webbrowser.open(adresse)
 
-    tick()
-    root.mainloop()
-
+    letzte = time.time()
+    try:
+        while True:
+            time.sleep(1 / 30)
+            jetzt = time.time()
+            if sim:
+                sim.schritt(jetzt - letzte)
+            letzte = jetzt
+            osc.senden(zustand)
+    except KeyboardInterrupt:
+        server.shutdown()
 
 # ---------------------------------------------------------------------------
 
@@ -365,7 +420,7 @@ def main():
                                  callback=callback, device=args.ausgang)
 
     with stream:
-        fenster(z, sim, OscSender())
+        oberflaeche(z, sim, OscSender())
 
 
 if __name__ == "__main__":
