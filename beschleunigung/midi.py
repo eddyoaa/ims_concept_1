@@ -4,13 +4,14 @@ Der ESP8266 schickt die Messwerte per UDP (Port 4210). Dieses Skript
 macht daraus einen virtuellen MIDI-Port namens „Beschleunigung“.
 Mit --serial geht weiterhin der Joy-IT über USB.
 
-Jede Achse ist die Neigung. Waagrecht auf der Achse ist 64, die eine
-Seite 0, die andere 127. Der Ton C3 bleibt an, die Achsen modulieren ihn.
+Jede Achse ist die Neigung, unabhängig von den anderen. Waagrecht ist 64.
+Wie schnell der Ball sich dreht oder bewegt, steuert die Lautstärke.
 Kanal 1:
 
-    X  ->  CC 16
-    Y  ->  CC 17
-    Z  ->  CC 18
+    X Neigung  ->  Tonhöhe (Pitch Bend)
+    Y Neigung  ->  CC 17
+    Z Neigung  ->  CC 18
+    Bewegung   ->  Lautstärke CC 7
 
 Auf http://127.0.0.1:8766 lässt sich jede Achse einzeln senden. Für MIDI-Learn
 in Helm „Nur X“ (oder Y, Z) drücken, dann Learn: es kommt nur diese eine
@@ -41,8 +42,11 @@ CCS = (16, 17, 18)
 KANAL = 0  # MIDI-Kanal 1
 SEITE_PORT = 8766
 UDP_PORT = 4210
-GLATT = 0.35   # Neigung folgt, ohne zu zittern
-NOTE = 48      # C3
+GLATT = 0.35      # Neigung folgt, ohne zu zittern
+TEMPO_GLATT = 0.3  # Lautstärke folgt der Bewegung
+RAUSCHEN = 0.012   # g je Messung, darunter gilt als still
+TEMPO_VOLL = 0.07  # so viel Änderung je Messung ist volle Lautstärke
+NOTE = 48         # C3
 
 SEITE = """<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><title>Beschleunigung</title>
@@ -68,12 +72,18 @@ SEITE = """<!doctype html>
   .ziel { font-size:14px; margin-top:4px; }
 </style></head><body>
 <h2>Beschleunigung</h2>
-<p class="klein">Jede Achse ist die Neigung. 64 ist waagrecht, 0 und 127 sind die beiden Seiten. Der Ton bleibt an, die Achsen verändern ihn.</p>
+<p class="klein">Neigung und Bewegung sind getrennt. Jede Achse kippt für sich. Drehen und Bewegen macht laut, Stillstand ist leise.</p>
 
 <h3>Von selbst</h3>
 <div class="karte">
   <div class="kopf"><b>Ton C3</b><span id="ton">Ton aus</span></div>
   <p class="ziel">Nichts lernen. In Helm bei der Amplitude Envelope <b>S</b> nach oben, sonst verklingt er.</p>
+</div>
+<div class="karte">
+  <div class="kopf"><b>Lautstärke</b><span class="cc" id="laut">CC 7 = 0</span></div>
+  <div class="balken"><div id="lautbalken"></div></div>
+  <p class="ziel">Wie schnell er sich dreht oder bewegt. Helm: Volume unten rechts.</p>
+  <div class="reihe"><button id="lernlaut" type="button">Anlernen</button></div>
 </div>
 
 <h3>In Helm lernen</h3>
@@ -82,21 +92,23 @@ SEITE = """<!doctype html>
 <div id="karten"></div>
 <script>
   const ziele = [
-    ["X", "Filter Cutoff, Schieber unter der Kurve"],
-    ["Y", "Filter Resonance, Schieber rechts an der Kurve"],
-    ["Z", "Distortion Drive, Modul dafür einschalten"]
+    ["X", "Tonhöhe. In Helm Pitch Bend auf 12 stellen, dann ist die volle Neigung eine Oktave.", false],
+    ["Y", "Filter Resonance, Schieber rechts an der Kurve", true],
+    ["Z", "Panorama, links und rechts", true]
   ];
   const karten = document.getElementById("karten");
-  ziele.forEach(([name, ziel], i) => {
+  ziele.forEach(([name, ziel, lernbar], i) => {
     const el = document.createElement("div");
     el.className = "karte";
     el.innerHTML = `<div class="kopf"><b>${name}</b><span class="cc"></span></div>
       <div class="balken"><div></div></div>
-      <p class="ziel">${ziel}</p>
-      <div class="reihe"><button class="lern" type="button">Anlernen</button></div>`;
-    el.querySelector(".lern").onclick = () => fetch("/lernen?was=" + i);
+      <p class="ziel">${ziel}</p>` + (lernbar
+        ? `<div class="reihe"><button class="lern" type="button">Anlernen</button></div>` : "");
+    const knopf = el.querySelector(".lern");
+    if (knopf) knopf.onclick = () => fetch("/lernen?was=" + i);
     karten.appendChild(el);
   });
+  document.getElementById("lernlaut").onclick = () => fetch("/lernen?was=laut");
   document.getElementById("stopp").onclick = () => fetch("/stopp");
   function setzen(el, text) {
     if (el.textContent !== text) el.textContent = text;
@@ -105,13 +117,17 @@ SEITE = """<!doctype html>
     try {
       const z = await (await fetch("/zustand")).json();
       setzen(document.getElementById("ton"), z.ton ? "Ton an" : "Ton aus");
+      setzen(document.getElementById("laut"), "CC 7 = " + z.laut);
+      document.getElementById("lautbalken").style.width = (z.laut / 127 * 100) + "%";
+      document.getElementById("lernlaut").classList.toggle("an", z.lernen === "laut");
       const stopp = document.getElementById("stopp");
       if (stopp.hidden !== !z.lernen) stopp.hidden = !z.lernen;
       z.achsen.forEach((a, i) => {
         const karte = karten.children[i];
-        setzen(karte.querySelector(".cc"), "CC " + a.cc + " = " + a.wert);
+        setzen(karte.querySelector(".cc"), i === 0 ? "Mitte 64, jetzt " + a.wert : "CC " + a.cc + " = " + a.wert);
         karte.querySelector(".balken div").style.width = (a.wert / 127 * 100) + "%";
-        karte.querySelector(".lern").classList.toggle("an", z.lernen === String(i));
+        const knopf = karte.querySelector(".lern");
+        if (knopf) knopf.classList.toggle("an", z.lernen === String(i));
       });
     } catch (e) {}
     setTimeout(tick, 50);
@@ -125,6 +141,10 @@ def als_cc(g):
     return max(0, min(127, round((g + 1.0) * 63.5)))
 
 
+def als_bend(g):
+    return int(max(-1.0, min(1.0, g)) * 8191)
+
+
 class Stand:
     def __init__(self):
         self.g = [0.0, 0.0, 0.0]
@@ -132,7 +152,10 @@ class Stand:
         self.an = [True, True, True]
         self.frisch = True
         self.glatt = [0.0, 0.0, 0.0]
+        self.vorher = None
+        self.tempo = 0.0
         self.letzter = [None, None, None]
+        self.letzter_bend = None
         self.ton = False
         self.zuletzt_bewegt = 0.0
         self.letzter_laut = None
@@ -289,6 +312,12 @@ def main():
                     stand.glatt = [alt + (neu - alt) * GLATT
                                    for alt, neu in zip(stand.glatt, werte)]
                 stand.g = stand.glatt
+                if stand.vorher is None:
+                    tempo_roh = 0.0
+                else:
+                    tempo_roh = sum((a - b) ** 2 for a, b in zip(stand.glatt, stand.vorher)) ** 0.5
+                stand.vorher = stand.glatt[:]
+                stand.tempo += (max(0.0, tempo_roh - RAUSCHEN) - stand.tempo) * TEMPO_GLATT
                 if not stand.ton and not stand.lernen:
                     stand.ton = True
                     midi.send(mido.Message("note_on", channel=KANAL, note=NOTE, velocity=100))
@@ -297,11 +326,21 @@ def main():
                 for achse, g in enumerate(stand.glatt):
                     cc = als_cc(g)
                     stand.cc[achse] = cc
+                    if achse == 0:
+                        bend = als_bend(g)
+                        if bend != stand.letzter_bend:
+                            stand.letzter_bend = bend
+                            midi.send(mido.Message("pitchwheel", channel=KANAL, pitch=bend))
+                        continue
                     if not stand.an[achse] or cc == stand.letzter[achse]:
                         continue
                     stand.letzter[achse] = cc
                     midi.send(mido.Message("control_change", channel=KANAL,
                                            control=CCS[achse], value=cc))
+                laut = max(0, min(127, round(min(stand.tempo / TEMPO_VOLL, 1.0) * 127)))
+                if laut != stand.letzter_laut:
+                    stand.letzter_laut = laut
+                    midi.send(mido.Message("control_change", channel=KANAL, control=7, value=laut))
     except KeyboardInterrupt:
         print()
     finally:
