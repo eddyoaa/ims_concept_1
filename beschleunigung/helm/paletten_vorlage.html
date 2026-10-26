@@ -120,6 +120,7 @@ details.helm dd { margin: 0; font-family: var(--schrift-daten); font-size: 0.78r
       <label class="feldchen"><span class="etikett">Drehung (Mod-Rad)</span>
         <input type="range" id="drehung" min="0" max="1" step="0.01" value="0"></label>
       <button class="knopf" id="stopp" type="button">Alles stoppen</button>
+      <button class="knopf haupt" id="laden" type="button" hidden>Helm-Presets laden (.zip)</button>
     </div>
   </header>
 
@@ -139,11 +140,12 @@ details.helm dd { margin: 0; font-family: var(--schrift-daten); font-size: 0.78r
     <section>
       <h3>In Helm laden</h3>
       <ol>
-        <li>In Helm oben auf den Preset-Namen klicken, dann <b>Import Bank</b>.</li>
-        <li><code>beschleunigung/helm/Ball-Klaenge.helmbank</code> wählen.</li>
+        <li><b>Helm-Presets laden</b> oben rechts, dann die Zip-Datei entpacken.</li>
+        <li>In Helm oben auf den Preset-Namen klicken, dann <b>Import Bank</b> und <code>Ball-Klaenge.helmbank</code> wählen.</li>
         <li>Die Bank „Ball-Klaenge“ erscheint im Browser, darin je Palette ein Ordner.</li>
       </ol>
-      <p class="hinweis">Alternativ die einzelnen <code>.helm</code>-Dateien nach <code>~/Library/Audio/Presets/Helm/Ball-Klaenge/</code> kopieren.</p>
+      <p class="hinweis">Die Bank liegt auch im Repo unter <code>beschleunigung/helm/Ball-Klaenge.helmbank</code>. Alternativ den entpackten Ordner <code>Ball-Klaenge</code> nach <code>~/Library/Audio/Presets/Helm/</code> kopieren.</p>
+      <p class="hinweis" id="laden-meldung" aria-live="polite"></p>
     </section>
     <section>
       <h3>Mit ball.py spielen</h3>
@@ -549,6 +551,64 @@ function zeichne() {
     raster.append(k);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Helm-Presets als Zip anbieten (Bank + einzelne Dateien)
+// ---------------------------------------------------------------------------
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+function zipDatei(eintraege) {   // ohne Kompression; eintraege = [[pfad, Uint8Array]]
+  const enc = new TextEncoder(), teile = [], zentral = [];
+  let ort = 0;
+  const kopf = (laenge) => { const b = new DataView(new ArrayBuffer(laenge)); return b; };
+  for (const [pfad, daten] of eintraege) {
+    const name = enc.encode(pfad), crc = crc32(daten);
+    const l = kopf(30);
+    l.setUint32(0, 0x04034b50, true); l.setUint16(4, 20, true); l.setUint16(6, 0x0800, true); l.setUint16(8, 0, true);
+    l.setUint16(10, 0, true); l.setUint16(12, 0x5b5a, true); l.setUint32(14, crc, true);
+    l.setUint32(18, daten.length, true); l.setUint32(22, daten.length, true); l.setUint16(26, name.length, true); l.setUint16(28, 0, true);
+    teile.push(new Uint8Array(l.buffer), name, daten);
+    const z = kopf(46);
+    z.setUint32(0, 0x02014b50, true); z.setUint16(4, 20, true); z.setUint16(6, 20, true); z.setUint16(8, 0x0800, true);
+    z.setUint16(10, 0, true); z.setUint16(12, 0, true); z.setUint16(14, 0x5b5a, true); z.setUint32(16, crc, true);
+    z.setUint32(20, daten.length, true); z.setUint32(24, daten.length, true); z.setUint16(28, name.length, true);
+    z.setUint32(42, ort, true);
+    zentral.push(new Uint8Array(z.buffer), name);
+    ort += 30 + name.length + daten.length;
+  }
+  const groesse = zentral.reduce((s, b) => s + b.length, 0), e = kopf(22);
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, eintraege.length, true); e.setUint16(10, eintraege.length, true);
+  e.setUint32(12, groesse, true); e.setUint32(16, ort, true);
+  const alles = [...teile, ...zentral, new Uint8Array(e.buffer)], aus = new Uint8Array(alles.reduce((s, b) => s + b.length, 0));
+  let i = 0; for (const b of alles) { aus.set(b, i); i += b.length; }
+  return aus;
+}
+function helmText(palette, preset) {
+  const s = einstellungen(preset);
+  return JSON.stringify({ license: "CC0: frei verwendbar.", synth_version: "0.9.0", patch_name: preset.name,
+    folder_name: palette.name, author: "Ball-Installation", settings: s }, null, 2);
+}
+function helmPaket() {
+  const enc = new TextEncoder(), presets = [];
+  for (const pal of DATEN.paletten) for (const p of pal.presets) presets.push([`Ball-Klaenge/${pal.name}/${p.name}.helm`, enc.encode(helmText(pal, p))]);
+  return zipDatei([["Ball-Klaenge.helmbank", zipDatei(presets)], ...presets]);
+}
+(async () => {
+  const dl = window.claude && window.claude.use ? await window.claude.use("downloads") : null;
+  if (!dl) return;
+  const knopf = $("#laden"), meldung = $("#laden-meldung");
+  knopf.hidden = false;
+  knopf.addEventListener("click", async () => {
+    try {
+      await dl.save({ filename: "Ball-Klaenge-Helm.zip", data: helmPaket() });
+      meldung.textContent = "Gespeichert. Zip entpacken, dann in Helm „Import Bank“.";
+    } catch (e) {
+      if (e && e.code === "declined") meldung.textContent = "";
+      else if (e && e.code === "rate_limited") meldung.textContent = "Es ist schon ein Speichern-Dialog offen.";
+      else { knopf.hidden = true; meldung.textContent = "Herunterladen geht hier nicht. Die Bank liegt im Repo unter beschleunigung/helm/."; }
+    }
+  });
+})();
 
 $("#szene").addEventListener("click", szene);
 $("#stopp").addEventListener("click", allesStopp);
