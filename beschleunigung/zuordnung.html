@@ -180,7 +180,8 @@ details.json textarea { width: 100%; min-height: 220px; margin-top: 10px; font: 
       <label class="feldchen"><span class="etikett">Ball</span><select id="auswahl"></select></label>
       <label class="feldchen"><span class="etikett">Neuer Ball</span><select id="feld-typ" aria-label="Balltyp für neuen Ball"></select></label>
       <button class="knopf klein haupt" type="button" id="feld-neu">+ Ball</button>
-      <button class="knopf klein haupt" type="button" id="beispiel">Beispiel-Gameplay (4 Bälle)</button>
+      <button class="knopf klein haupt" type="button" id="beispiel">Gameplay starten</button>
+      <label class="feldchen"><span class="etikett">Personen</span><select id="spiel-max" aria-label="Wie viele Personen höchstens"></select></label>
       <button class="knopf klein" type="button" data-sim="werfen">Werfen</button>
       <button class="knopf klein" type="button" data-sim="hoch">Hochwerfen und fangen</button>
       <button class="knopf klein" type="button" data-sim="fallen">Fallen lassen</button>
@@ -194,7 +195,6 @@ details.json textarea { width: 100%; min-height: 220px; margin-top: 10px; font: 
         <label class="feldchen"><span class="etikett">Bodenzonen</span><select id="raum-zonen"></select></label>
         <label class="feldchen"><span class="etikett">Abstand der Bälle</span><select id="raum-abstand"></select></label>
         <label class="schalter"><input type="checkbox" id="raum-echo"> Gefangene Pässe hallen nach</label>
-        <label class="schalter"><input type="checkbox" id="raum-puls"> Puls 90 BPM</label>
         <label class="schalter"><input type="checkbox" id="raum-linien" checked> Abstände und Schwerpunkt zeigen</label>
       </div>
       <div class="raum-werte" aria-live="off">
@@ -891,9 +891,9 @@ function uebernimm(z, quelle) {
   zu = z;
   zu.grundton = zu.grundton ?? 48; zu.skala = SKALEN[zu.skala] ? zu.skala : "moll_pentatonik";
   if (!PAL.some((p) => p.name === zu.palette)) zu.palette = PAL[0].name;
-  zu.raum = Object.assign({ zonen: "aus", abstand: "nichts", echo: false, puls: false }, zu.raum || {});
+  zu.raum = Object.assign({ zonen: "aus", abstand: "nichts", echo: false }, zu.raum || {});
   harmonie = 0;
-  $("#raum-echo").checked = !!zu.raum.echo; $("#raum-puls").checked = !!zu.raum.puls;
+  $("#raum-echo").checked = !!zu.raum.echo;
   $("#palette").value = zu.palette; $("#raum-zonen").value = zu.raum.zonen; $("#raum-abstand").value = zu.raum.abstand;
   for (const id of Object.keys(sim)) if (!ballVon(+id)) delete sim[id];
   gewaehlt = zu.baelle[0]?.id ?? null;
@@ -985,7 +985,7 @@ function schritt_sim(dt) {
       }
       if (s.fang != null && s.vz < 0 && s.z <= s.fang) {
         s.z = s.fang; landung(b, s, { gefangen: true }); s.zustand = "gehalten"; s.halten = 0.7; s.vx = s.vy = 0;
-        if (s.fangSpieler && spiel) { const p = spielerVon(s.fangSpieler); if (p) { p.ball = b.id; s.traeger = p.name; s.halten = 0; } }
+        if (s.fangSpieler && spiel) { const p = spielerVon(s.fangSpieler); if (p) nimm(p, b.id); }
         s.fangSpieler = null;
       } else if (s.z <= 0) {
         s.z = 0; zoneWechseln(b, s); landung(b, s);
@@ -1181,7 +1181,7 @@ feld.addEventListener("pointerdown", (ev) => {
   waehle(b.id);
   const s = simBall(b);
   if (s.zustand === "flug") landung(b, s);
-  if (spiel) for (const q of spiel.spieler) if (q.ball === b.id) q.ball = null;
+  if (spiel) for (const q of spiel.spieler) { if (q.ball === b.id) q.ball = null; if (q.jagt === b.id) q.jagt = null; }
   s.traeger = null; s.fangSpieler = null;
   s.zustand = "gehalten"; s.z = HAND; s.vx = s.vy = s.vz = 0; s.ruheGemeldet = false;
   s.hand = { spur: [{ t: performance.now(), x: s.x, y: s.y }], tempo: 0 };
@@ -1337,114 +1337,120 @@ $("#datei").addEventListener("change", (ev) => {
 $("#zuruecksetzen").addEventListener("click", () => { uebernimm(beispiel()); melde("Beispiel mit drei Bällen wiederhergestellt."); });
 
 // ---------------------------------------------------------------------------
-// Beispiel-Gameplay: drei Spieler, vier Bälle, etwa eine Minute.
-// Folgt dem Szenario „Klangfeld“: Puls, Hochwerfen, Rollen, Pässe mit Echo,
-// Bodenzonen wechseln die Harmonie, Zusammenrücken, Ausklang.
+// Gameplay: Personen kommen nach und nach dazu und spielen von selbst mit den Bällen.
+// Jede Person holt sich freie Bälle, rollt sie anderen zu, passt, wirft hoch,
+// lässt aufspringen oder streichelt. Bodenzonen, Echo und Abstand wirken wie sonst.
 // ---------------------------------------------------------------------------
 const LICHT = [{ x: 1.2, y: 5.2 }, { x: 3.0, y: 5.4 }, { x: 5.0, y: 5.4 }, { x: 6.8, y: 5.2 }];
+const PERSONEN = ["A", "B", "C", "D", "E", "F", "G", "H"];
+const GEHEN = 1.5, LAUFEN = 2.6;
 let spiel = null;
+const zufall = (a, b) => a + Math.random() * (b - a);
+const eins = (liste) => liste.at(Math.floor(Math.random() * liste.length));
 
 function spielerVon(n) { return spiel?.spieler.find((p) => p.name === n); }
-function geh(n, x, y) { const p = spielerVon(n); p.zx = x; p.zy = y; }
 function ballNr(i) { return zu.baelle.find((b) => b.id === i); }
 function haende(p) { return { x: p.x + 0.28, y: p.y }; }
+function ballName(b) { return { softball: "den Softball", medizinball: "den Medizinball", tennisball: "den Tennisball", haarball: "den Haar-Ball", luftballon: "den Luftballon", wasserball: "den Wasserball", basketball: "den Basketball", noppenball: "den Noppenball" }[b.typ] || b.name; }
 
-function nimm(n, id) {
-  const p = spielerVon(n), b = ballNr(id), s = simBall(b);
-  for (const q of spiel.spieler) if (q.ball === id) q.ball = null;
-  p.ball = id; s.traeger = n; s.zustand = "gehalten"; s.halten = 0; s.hand = null; s.vx = s.vy = s.vz = 0; s.ruheGemeldet = false;
+function nimm(p, id) {
+  const b = ballNr(id), s = simBall(b);
+  for (const q of spiel.spieler) { if (q.ball === id) q.ball = null; if (q.jagt === id) q.jagt = null; }
+  p.ball = id; p.jagt = null; p.erwartet = false; p.halteZeit = zufall(0.6, 1.6); p.gestreichelt = false;
+  s.traeger = p.name; s.zustand = "gehalten"; s.halten = 0; s.hand = null; s.vx = s.vy = s.vz = 0; s.ruheGemeldet = false; s.fangSpieler = null;
 }
-function loslassen_(n) { const p = spielerVon(n), s = simBall(ballNr(p.ball)); s.traeger = null; p.ball = null; return s; }
-function hochwerfen(n, T) {
-  const p = spielerVon(n), b = ballNr(p.ball), s = loslassen_(n);
-  s.fangSpieler = n; s.z = HAND; abflug(b, s, 0, 0, (G * T) / 2, HAND);
-}
-function passen(von, nach, T) {
-  const p = spielerVon(von), q = spielerVon(nach), b = ballNr(p.ball), s = loslassen_(von), ziel = haende(q);
-  s.fangSpieler = nach; s.z = HAND;
-  abflug(b, s, (ziel.x - s.x) / T, (ziel.y - s.y) / T, (G * T) / 2, HAND);
-}
-function aufBoden(n, x, y, T) {
-  const p = spielerVon(n), b = ballNr(p.ball), s = loslassen_(n);
-  s.fangSpieler = null; s.z = HAND;
-  abflug(b, s, (x - s.x) / T, (y - s.y) / T, (G * T * T / 2 - HAND) / T);
-}
-function rollen_(n, x, y) {
-  const p = spielerVon(n), b = ballNr(p.ball), s = loslassen_(n), typ = typVon(b);
-  const dx = x - s.x, dy = y - s.y, weg = Math.hypot(dx, dy) || 1, v = Math.sqrt(2 * typ.reibung * weg);
-  s.z = 0; s.zustand = "rollen"; s.still = 0; s.vx = (dx / weg) * v; s.vy = (dy / weg) * v;
-  sende(b, "stoss", { staerke: 0.7 });
-}
-function fallenLassen(n) { const p = spielerVon(n), b = ballNr(p.ball), s = loslassen_(n); s.fangSpieler = null; s.z = HAND; abflug(b, s, 0, 0, 0); }
-function ablegen(n) { const p = spielerVon(n), s = loslassen_(n); s.z = 0; s.zustand = "rollen"; s.still = 0; s.vx = s.vy = 0; }
-function streicheln(n, dauer) {     // das Mikro im Ball hört jede Berührung
-  const p = spielerVon(n), b = ballNr(p.ball), s = simBall(b);
-  s.schuetteln = dauer;
-  for (let t = 0; t < dauer; t += 0.32) spiel.extra.push({ t: spiel.t + t, tun: () => sende(b, "stoss", { staerke: 0.35 + 0.3 * Math.random() }) });
-}
-function erzaehle(text) { const el = $("#szene-text"); el.hidden = false; el.textContent = text; }
+function loslassen_(p) { const s = simBall(ballNr(p.ball)); s.traeger = null; p.ball = null; return s; }
 
-const DREHBUCH = [
-  [0.0, () => erzaehle("Die vier Bälle liegen auf Lichtpunkten. Ein leiser Puls läuft. Drei Spieler kommen herein.")],
-  [1.0, () => { geh("A", LICHT[0].x, LICHT[0].y - 0.4); geh("B", LICHT[1].x, LICHT[1].y - 0.4); }],
-  [3.6, () => { nimm("A", 1); erzaehle("A hebt den Softball auf …"); geh("A", 2.4, 2.8); }],
-  [5.4, () => { hochwerfen("A", 0.8); erzaehle("… und wirft ihn hoch. Abflug = Ton, Landung je nach Wurfhöhe."); }],
-  [7.0, () => hochwerfen("A", 1.3)],
-  [8.8, () => { nimm("B", 2); geh("B", 5.4, 3.2); erzaehle("B nimmt den Medizinball."); }],
-  [11.4, () => { rollen_("B", 2.9, 2.6); erzaehle("B rollt ihn zu A: der Bass setzt ein, die Drehung öffnet den Filter."); }],
-  [13.5, () => geh("B", 5.6, 2.6)],
-  [15.0, () => { passen("A", "B", 0.9); erzaehle("Pässe zwischen A und B: jeder gefangene Pass hallt im Takt seiner Flugzeit nach."); }],
-  [16.6, () => passen("B", "A", 0.9)],
-  [18.2, () => passen("A", "B", 1.1)],
-  [20.0, () => { aufBoden("B", 6.6, 1.2, 1.0); erzaehle("B wirft den Softball nach hinten rechts. Er landet in Zone F: die Harmonie wechselt."); }],
-  [21.0, () => { geh("C", LICHT[3].x, LICHT[3].y - 0.4); }],
-  [23.6, () => { nimm("C", 4); geh("C", 4.2, 3.9); erzaehle("C holt den Haar-Ball."); }],
-  [26.0, () => { streicheln("C", 3.2); erzaehle("C streichelt ihn: jede Berührung raschelt, die Bewegung macht es lauter."); }],
-  [29.6, () => { ablegen("C"); geh("C", LICHT[2].x, LICHT[2].y - 0.4); }],
-  [31.6, () => { nimm("C", 3); geh("C", 5.4, 2.6); erzaehle("C nimmt den Tennisball."); }],
-  [33.4, () => { fallenLassen("C"); erzaehle("C lässt ihn aufspringen: jeder Aufprall ein Schlag, immer schneller."); }],
-  [35.6, () => { nimm("C", 3); }],
-  [36.0, () => { aufBoden("C", 1.8, 4.6, 0.9); erzaehle("Wurf nach vorne links, Zone G: die Harmonie wechselt wieder."); geh("A", 2.1, 4.2); geh("B", 6.5, 1.6); }],
-  [38.4, () => { nimm("A", 3); nimm("B", 1); geh("C", 4.2, 3.9); }],
-  [40.2, () => { nimm("C", 4); erzaehle("Alle rücken zusammen. Die Bälle kommen nah zueinander, der Hall wird trocken.");
-    geh("A", 3.3, 3.0); geh("B", 4.3, 2.6); geh("C", 3.9, 3.6); }],
-  [44.5, () => { hochwerfen("A", 0.7); }],
-  [45.4, () => { hochwerfen("B", 0.9); }],
-  [46.6, () => { erzaehle("Zum Schluss legen alle ihre Bälle zurück auf die Lichtpunkte. Die Stimmen verklingen nacheinander.");
-    geh("A", LICHT[2].x, LICHT[2].y - 0.4); geh("B", LICHT[0].x, LICHT[0].y - 0.4); geh("C", LICHT[3].x, LICHT[3].y - 0.4); }],
-  [50.0, () => { ablegen("A"); ablegen("B"); ablegen("C"); }],
-  [51.0, () => { geh("A", 3.2, 1.0); geh("B", 1.2, 1.0); geh("C", 6.8, 1.0); }],
-  [54.0, () => { zu.raum.puls = false; $("#raum-puls").checked = false; erzaehle("Ende. Die Bälle bleiben im Feld, du kannst einfach weiterspielen."); }],
-  [56.0, () => spielEnde()],
-];
+function erzaehle(text) {
+  const el = $("#szene-text"); el.hidden = false;
+  el.textContent = `${spiel.spieler.length} ${spiel.spieler.length === 1 ? "Person" : "Personen"}, ${zu.baelle.length} Bälle · ${text}`;
+}
+
+// Was eine Person mit dem Ball in der Hand macht
+function handeln(p) {
+  const b = ballNr(p.ball), s = simBall(b), typ = b.typ;
+  const frei = spiel.spieler.filter((q) => q !== p && !q.ball && !q.erwartet && q.jagt == null);
+  const ziel = frei.length ? frei.reduce((a, q) => (Math.hypot(q.x - p.x, q.y - p.y) > 1.2 && Math.random() < 0.6 ? q : a), eins(frei)) : null;
+  let w = { rollen: 0.42, passen: 0.3, hoch: 0.12, boden: 0.08, prellen: 0.08 };
+  if (typ === "medizinball") w = { rollen: 0.85, boden: 0.15 };
+  if (typ === "luftballon" || typ === "wasserball") w = { hoch: 0.5, passen: 0.4, rollen: 0.1 };
+  if (typ === "tennisball" || typ === "basketball") w = { prellen: 0.3, passen: 0.3, rollen: 0.2, boden: 0.2 };
+  if (typ === "haarball" && !p.gestreichelt) {
+    p.gestreichelt = true; s.schuetteln = 2.0; p.halteZeit = 2.2;
+    for (let t = 0; t < 2; t += 0.3) spiel.extra.push({ t: spiel.t + t, tun: () => { if (s.traeger === p.name) sende(b, "stoss", { staerke: zufall(0.3, 0.6) }); } });
+    erzaehle(`${p.name} streichelt ${ballName(b)}`);
+    return;
+  }
+  if (!ziel) delete w.passen;
+  let r = Math.random() * Object.values(w).reduce((a, x) => a + x, 0), was = "rollen";
+  for (const [k, x] of Object.entries(w)) { if ((r -= x) <= 0) { was = k; break; } }
+  if (was === "passen" && !ziel) was = "rollen";
+  const rand = () => ({ x: zufall(0.7, RAUM_B - 0.7), y: zufall(0.7, RAUM_T - 0.7) });
+
+  if (was === "passen") {
+    const h = haende(ziel), weg = Math.hypot(h.x - s.x, h.y - s.y), T = clamp(0.55 + weg * 0.1, 0.6, 1.3);
+    loslassen_(p); s.fangSpieler = ziel.name; s.z = HAND; ziel.erwartet = true; ziel.wartetBis = spiel.t + T + 1;
+    abflug(b, s, (h.x - s.x) / T, (h.y - s.y) / T, (G * T) / 2, HAND);
+    erzaehle(`${p.name} passt ${ballName(b)} zu ${ziel.name}`);
+  } else if (was === "rollen") {
+    const h = ziel ? { x: ziel.x, y: ziel.y } : rand(), dx = h.x - s.x, dy = h.y - s.y, weg = Math.hypot(dx, dy) || 1;
+    const v = Math.sqrt(2 * typVon(b).reibung * Math.max(0.5, weg - 0.3));
+    loslassen_(p); s.z = 0; s.zustand = "rollen"; s.still = 0; s.vx = (dx / weg) * v; s.vy = (dy / weg) * v;
+    sende(b, "stoss", { staerke: 0.6 });
+    if (ziel) { ziel.jagt = b.id; ziel.pause = 0.25; erzaehle(`${p.name} rollt ${ballName(b)} zu ${ziel.name}`); }
+    else erzaehle(`${p.name} rollt ${ballName(b)} durch den Raum`);
+  } else if (was === "hoch") {
+    const T = zufall(0.7, 1.4);
+    loslassen_(p); s.fangSpieler = p.name; s.z = HAND; p.erwartet = true; p.wartetBis = spiel.t + T + 1;
+    abflug(b, s, 0, 0, (G * T) / 2, HAND);
+    erzaehle(`${p.name} wirft ${ballName(b)} hoch`);
+  } else if (was === "prellen") {
+    loslassen_(p); s.fangSpieler = null; s.z = HAND; abflug(b, s, 0, 0, 0);
+    p.jagt = b.id; p.pause = 1.2;
+    erzaehle(`${p.name} lässt ${ballName(b)} aufspringen`);
+  } else {
+    const z = rand(), T = clamp(0.6 + Math.hypot(z.x - s.x, z.y - s.y) * 0.08, 0.6, 1.2);
+    loslassen_(p); s.fangSpieler = null; s.z = HAND;
+    abflug(b, s, (z.x - s.x) / T, (z.y - s.y) / T, (G * T * T / 2 - HAND) / T);
+    erzaehle(`${p.name} wirft ${ballName(b)} in den Raum`);
+  }
+}
+
+function neuePerson() {
+  const frei = PERSONEN.filter((n) => !spielerVon(n));
+  if (!frei.length) return;
+  const rand = eins([[zufall(0.4, RAUM_B - 0.4), 0.3], [zufall(0.4, RAUM_B - 0.4), RAUM_T - 0.3], [0.3, zufall(0.4, RAUM_T - 0.4)], [RAUM_B - 0.3, zufall(0.4, RAUM_T - 0.4)]]);
+  const p = { name: frei[0], x: rand[0], y: rand[1], zx: zufall(1.5, RAUM_B - 1.5), zy: zufall(1.2, RAUM_T - 1.2),
+    ball: null, jagt: null, erwartet: false, halteZeit: 0, pause: zufall(0.5, 1.5), tempo: 0 };
+  spiel.spieler.push(p);
+  erzaehle(`${p.name} kommt dazu`);
+}
 
 function spielStart() {
   audioStart();
   allesStumm();
   const ball = (id, typ) => { const b = neuerBall(id, typ); b.kanal = id; return b; };
-  zu = { grundton: 48, skala: "moll_pentatonik", palette: "Material",
-    raum: { zonen: "akkorde", abstand: "hall", echo: true, puls: true },
+  zu = { grundton: 48, skala: "moll_pentatonik", palette: zu.palette || "Material",
+    raum: { zonen: "akkorde", abstand: "hall", echo: true },
     baelle: [ball(1, "softball"), ball(2, "medizinball"), ball(3, "tennisball"), ball(4, "haarball")] };
   harmonie = 0;
   for (const k of Object.keys(sim)) delete sim[k];
   zu.baelle.forEach((b, i) => { const s = simBall(b); s.x = LICHT[i].x; s.y = LICHT[i].y; });
-  spiel = { t: 0, schritt: 0, extra: [], spieler: [
-    { name: "A", x: 0.6, y: 0.6, zx: 0.6, zy: 0.6, ball: null },
-    { name: "B", x: 0.6, y: 1.4, zx: 0.6, zy: 1.4, ball: null },
-    { name: "C", x: 7.4, y: 0.6, zx: 7.4, zy: 0.6, ball: null }] };
+  spiel = { t: 0, extra: [], spieler: [], naechste: 0, max: parseInt($("#spiel-max").value, 10) || 6 };
   gewaehlt = 1;
   $("#palette").value = zu.palette; $("#raum-zonen").value = "akkorde"; $("#raum-abstand").value = "hall";
-  $("#raum-echo").checked = true; $("#raum-puls").checked = true; $("#grundton").value = "48"; $("#skala").value = zu.skala;
+  $("#raum-echo").checked = true; $("#grundton").value = "48"; $("#skala").value = zu.skala;
   zeichneZuordnung(); geaendert();
-  $("#beispiel").textContent = "Beispiel stoppen";
-  protokolliere(zu.baelle[0], { art: "start" }, "Beispiel-Gameplay mit 4 Bällen");
+  neuePerson(); neuePerson();
+  spiel.naechste = 6;
+  $("#beispiel").textContent = "Gameplay stoppen";
 }
 function spielEnde() {
   if (!spiel) return;
-  for (const p of spiel.spieler) if (p.ball) loslassen_(p.name);
+  for (const p of spiel.spieler) if (p.ball) loslassen_(p);
   spiel = null;
-  $("#beispiel").textContent = "Beispiel-Gameplay (4 Bälle)";
-  setTimeout(() => { if (!spiel) $("#szene-text").hidden = true; }, 4000);
+  $("#beispiel").textContent = "Gameplay starten";
+  setTimeout(() => { if (!spiel) $("#szene-text").hidden = true; }, 3000);
 }
 function allesStumm() {
   if (!ctx) return;
@@ -1455,29 +1461,44 @@ function allesStumm() {
 function spielSchritt(dt) {
   if (!spiel) return;
   spiel.t += dt;
-  while (spiel && spiel.schritt < DREHBUCH.length && DREHBUCH[spiel.schritt][0] <= spiel.t) { const tun = DREHBUCH[spiel.schritt][1]; spiel.schritt++; tun(); }
-  if (!spiel) return;
+  spiel.max = parseInt($("#spiel-max").value, 10) || spiel.max;
+  if (spiel.spieler.length < spiel.max && spiel.t >= spiel.naechste) { neuePerson(); spiel.naechste = spiel.t + zufall(5, 8); }
+  while (spiel.spieler.length > spiel.max) { const p = spiel.spieler.pop(); if (p.ball) loslassen_(p); erzaehle(`${p.name} geht`); }
   spiel.extra = spiel.extra.filter((e) => { if (e.t <= spiel.t) { e.tun(); return false; } return true; });
-  for (const p of spiel.spieler) {
-    const dx = p.zx - p.x, dy = p.zy - p.y, weg = Math.hypot(dx, dy), v = Math.min(weg, 1.7 * dt);
-    p.tempo = weg > 0.01 ? 1.7 : 0;
-    if (weg > 0.001) { p.x += (dx / weg) * v; p.y += (dy / weg) * v; }
-  }
-}
 
-// Puls: ein leises Klicken im Takt, die Eins etwas lauter
-let naechsterPuls = 0, pulsZaehler = 0;
-function pulsPlanen() {
-  if (!ctx || !tonAn || !zu.raum?.puls) { naechsterPuls = 0; return; }
-  const schlag = 60 / 90;
-  if (naechsterPuls < ctx.currentTime) { naechsterPuls = ctx.currentTime + 0.05; pulsZaehler = 0; }
-  while (naechsterPuls < ctx.currentTime + 0.12) {
-    const q = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), t = naechsterPuls;
-    q.buffer = rauschPuffer; f.type = "bandpass"; f.frequency.value = pulsZaehler % 4 === 0 ? 2200 : 3800; f.Q.value = 3;
-    const pegel = pulsZaehler % 4 === 0 ? 0.09 : 0.05;
-    g.gain.setValueAtTime(pegel, t); g.gain.exponentialRampToValueAtTime(0.0005, t + 0.04);
-    q.connect(f); f.connect(g); g.connect(master); q.start(t); q.stop(t + 0.05);
-    naechsterPuls += schlag; pulsZaehler++;
+  for (const p of spiel.spieler) {
+    if (p.erwartet && spiel.t > p.wartetBis) p.erwartet = false;
+    if (p.ball != null) {                                  // hält einen Ball
+      p.halteZeit -= dt;
+      if (p.halteZeit <= 0) handeln(p);
+    } else if (p.erwartet) {                               // wartet auf einen Pass
+      p.zx = p.x; p.zy = p.y;
+    } else if (p.jagt != null) {                           // holt einen Ball
+      const b = ballNr(p.jagt), s = b && simBall(b);
+      if (!b || s.traeger || (s.fangSpieler && s.fangSpieler !== p.name)) { p.jagt = null; }
+      else {
+        p.pause -= dt;
+        const tempo = Math.hypot(s.vx, s.vy);
+        if (p.pause <= 0) { p.zx = s.x - 0.28; p.zy = s.y; }
+        if (s.zustand !== "flug" && tempo < 1.4 && Math.hypot(s.x - p.x - 0.28, s.y - p.y) < 0.5) nimm(p, b.id);
+      }
+    } else {                                               // sucht sich einen freien Ball oder schlendert
+      const freie = zu.baelle.filter((b) => {
+        const s = simBall(b);
+        return b.aktiv !== false && !s.traeger && s.zustand !== "flug" && !s.fangSpieler && !spiel.spieler.some((q) => q.jagt === b.id);
+      });
+      p.pause -= dt;
+      if (freie.length && p.pause <= 0 && Math.random() < 0.02) {
+        const naechster = freie.reduce((a, b) => (Math.hypot(simBall(b).x - p.x, simBall(b).y - p.y) < Math.hypot(simBall(a).x - p.x, simBall(a).y - p.y) ? b : a));
+        p.jagt = naechster.id; p.pause = 0;
+      } else if (Math.hypot(p.zx - p.x, p.zy - p.y) < 0.1 && Math.random() < 0.01) {
+        p.zx = clamp(p.x + zufall(-1.5, 1.5), 0.5, RAUM_B - 0.5); p.zy = clamp(p.y + zufall(-1.2, 1.2), 0.5, RAUM_T - 0.5);
+      }
+    }
+    const schnell = p.jagt != null ? LAUFEN : GEHEN;
+    const dx = p.zx - p.x, dy = p.zy - p.y, weg = Math.hypot(dx, dy), v = Math.min(weg, schnell * dt);
+    p.tempo = weg > 0.02 ? schnell : 0;
+    if (weg > 0.001) { p.x = clamp(p.x + (dx / weg) * v, 0.25, RAUM_B - 0.25); p.y = clamp(p.y + (dy / weg) * v, 0.25, RAUM_T - 0.25); }
   }
 }
 
@@ -1497,9 +1518,9 @@ function zeichneSpiel() {
 }
 
 $("#beispiel").addEventListener("click", () => { if (spiel) { spielEnde(); allesStumm(); } else spielStart(); });
+for (let n = 2; n <= 8; n++) { const o = document.createElement("option"); o.value = String(n); o.textContent = `bis ${n}`; if (n === 6) o.selected = true; $("#spiel-max").append(o); }
 $("#raum-echo").addEventListener("change", (ev) => { zu.raum.echo = ev.target.checked; geaendert(); });
-$("#raum-puls").addEventListener("change", (ev) => { audioStart(); zu.raum.puls = ev.target.checked; geaendert(); });
-$("#raum-echo").checked = !!zu.raum.echo; $("#raum-puls").checked = !!zu.raum.puls;
+$("#raum-echo").checked = !!zu.raum.echo;
 
 // ---------------------------------------------------------------------------
 // Start
@@ -1530,7 +1551,6 @@ function schleife(t) {
   const dt = Math.min(0.05, (t - letzteZeit) / 1000); letzteZeit = t; jetzt += dt;
   spielSchritt(dt);
   schritt_sim(dt);
-  pulsPlanen();
   for (const b of zu.baelle) {   // echter Ball im Flug: hebt sich in der Mitte des Felds
     const s = simBall(b);
     if (s.liveFlug != null) { const f = (performance.now() - s.liveFlug) / 1000; s.z = Math.min(2.5, 3 * f); }
