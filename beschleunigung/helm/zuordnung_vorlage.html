@@ -141,6 +141,7 @@ input[type="color"] { width: 36px; height: 34px; border: 1px solid var(--rand); 
   .zeile.stetig .was { grid-column: auto; }
 }
 
+.szene-text { margin: 0; padding: 10px 14px; border-radius: 10px; background: var(--akzent-zart); color: var(--tinte); font-weight: 700; line-height: 1.35; min-height: 3.2em; }
 .raum { background: var(--karte); border: 1px solid var(--rand); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; }
 .raum-zeile { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
 .raum-werte { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.85rem; color: var(--leise); }
@@ -172,12 +173,14 @@ details.json textarea { width: 100%; min-height: 220px; margin-top: 10px; font: 
 
 <main class="raster">
   <section class="spiel" aria-label="Spielfeld">
+    <p class="szene-text" id="szene-text" aria-live="polite" hidden></p>
     <div class="feldrahmen"><canvas id="feld" aria-label="Spielfeld von oben. Bälle ziehen und loslassen zum Werfen oder Rollen."></canvas></div>
     <p class="hinweis">Ball ziehen und schnell loslassen = werfen, langsam = rollen. Fliegenden Ball antippen = fangen. Doppelklick auf eine freie Stelle setzt dort einen neuen Ball hin.</p>
     <div class="aktionen">
       <label class="feldchen"><span class="etikett">Ball</span><select id="auswahl"></select></label>
       <label class="feldchen"><span class="etikett">Neuer Ball</span><select id="feld-typ" aria-label="Balltyp für neuen Ball"></select></label>
       <button class="knopf klein haupt" type="button" id="feld-neu">+ Ball</button>
+      <button class="knopf klein haupt" type="button" id="beispiel">Beispiel-Gameplay (4 Bälle)</button>
       <button class="knopf klein" type="button" data-sim="werfen">Werfen</button>
       <button class="knopf klein" type="button" data-sim="hoch">Hochwerfen und fangen</button>
       <button class="knopf klein" type="button" data-sim="fallen">Fallen lassen</button>
@@ -190,6 +193,8 @@ details.json textarea { width: 100%; min-height: 220px; margin-top: 10px; font: 
       <div class="raum-zeile">
         <label class="feldchen"><span class="etikett">Bodenzonen</span><select id="raum-zonen"></select></label>
         <label class="feldchen"><span class="etikett">Abstand der Bälle</span><select id="raum-abstand"></select></label>
+        <label class="schalter"><input type="checkbox" id="raum-echo"> Gefangene Pässe hallen nach</label>
+        <label class="schalter"><input type="checkbox" id="raum-puls"> Puls 90 BPM</label>
         <label class="schalter"><input type="checkbox" id="raum-linien" checked> Abstände und Schwerpunkt zeigen</label>
       </div>
       <div class="raum-werte" aria-live="off">
@@ -635,6 +640,10 @@ function ereignis(e) {
     const stimmen = noten.map((n) => stimme(b, n, clamp(vel, 1, 127), modus));
     if (modus === "halten") gehalten[b.id] = stimmen;
     folge = `${F_AUSLOESER[funktion]} ${noten.map(notenName).join(" ")}`;
+    if (e.art === "landung" && e.gefangen && zu.raum?.echo && e.dauer >= 0.25 && e.dauer <= 2) {
+      for (let k = 1; k <= 3; k++) setTimeout(() => noten.forEach((n) => stimme(b, n, clamp(Math.round(vel * Math.pow(0.55, k)), 1, 127), "schlag")), k * e.dauer * 1000);
+      folge += `, Echo alle ${komma(e.dauer)} s`;
+    }
   }
   protokolliere(b, e, folge);
   blitze(b.id, e.art);
@@ -674,7 +683,7 @@ function steuern(b, q) {
 // ---------------------------------------------------------------------------
 // Anzeige: Protokoll, Aufblitzen, Messer
 // ---------------------------------------------------------------------------
-const ARTNAMEN = { abflug: "Abflug", landung: "Landung", stoss: "Stoß", ruhe: "Ruhe", zone: "neue Bodenzone" };
+const ARTNAMEN = { abflug: "Abflug", landung: "Landung", stoss: "Stoß", ruhe: "Ruhe", zone: "neue Bodenzone", start: "Start" };
 const startZeit = performance.now();
 function protokolliere(b, e, folge) {
   const liste = $("#protokoll");
@@ -882,8 +891,9 @@ function uebernimm(z, quelle) {
   zu = z;
   zu.grundton = zu.grundton ?? 48; zu.skala = SKALEN[zu.skala] ? zu.skala : "moll_pentatonik";
   if (!PAL.some((p) => p.name === zu.palette)) zu.palette = PAL[0].name;
-  zu.raum = Object.assign({ zonen: "aus", abstand: "nichts" }, zu.raum || {});
+  zu.raum = Object.assign({ zonen: "aus", abstand: "nichts", echo: false, puls: false }, zu.raum || {});
   harmonie = 0;
+  $("#raum-echo").checked = !!zu.raum.echo; $("#raum-puls").checked = !!zu.raum.puls;
   $("#palette").value = zu.palette; $("#raum-zonen").value = zu.raum.zonen; $("#raum-abstand").value = zu.raum.abstand;
   for (const id of Object.keys(sim)) if (!ballVon(+id)) delete sim[id];
   gewaehlt = zu.baelle[0]?.id ?? null;
@@ -933,9 +943,9 @@ function abflug(b, s, vx, vy, vz, fang = null) {
   s.vx = vx; s.vy = vy; s.vz = vz; s.zustand = "flug"; s.abflugT = jetzt; s.fang = fang; s.ruheGemeldet = false;
   sende(b, "abflug");
 }
-function landung(b, s) {
+function landung(b, s, extra = {}) {
   const dauer = jetzt - s.abflugT;
-  sende(b, "landung", { dauer, staerke: Math.min(1, dauer) });
+  sende(b, "landung", { dauer, staerke: Math.min(1, dauer), ...extra });
 }
 
 const SIM = {
@@ -960,7 +970,9 @@ function schritt_sim(dt) {
     const s = simBall(b), typ = typVon(b), r = typ.d / 2;
     let rollTempo = 0;
     if (s.zustand === "gehalten") {
-      // folgt dem Zeiger, z = Handhöhe
+      // folgt dem Zeiger oder dem Spieler, der ihn trägt; z = Handhöhe
+      const p = s.traeger && spiel ? spielerVon(s.traeger) : null;
+      if (p) { const h = haende(p); s.x = h.x; s.y = h.y; s.z = HAND; }
     } else if (s.zustand === "flug") {
       if (typ.luft) { const bremse = Math.exp(-typ.luft * dt); s.vx *= bremse; s.vy *= bremse; s.vz = s.vz * bremse - G * dt * (1 - Math.min(0.85, typ.luft * 0.3)); }
       else s.vz -= G * dt;
@@ -972,7 +984,9 @@ function schritt_sim(dt) {
         }
       }
       if (s.fang != null && s.vz < 0 && s.z <= s.fang) {
-        s.z = s.fang; landung(b, s); s.zustand = "gehalten"; s.halten = 0.7; s.vx = s.vy = 0;
+        s.z = s.fang; landung(b, s, { gefangen: true }); s.zustand = "gehalten"; s.halten = 0.7; s.vx = s.vy = 0;
+        if (s.fangSpieler && spiel) { const p = spielerVon(s.fangSpieler); if (p) { p.ball = b.id; s.traeger = p.name; s.halten = 0; } }
+        s.fangSpieler = null;
       } else if (s.z <= 0) {
         s.z = 0; zoneWechseln(b, s); landung(b, s);
         const vz = -s.vz * typ.sprung;
@@ -999,7 +1013,7 @@ function schritt_sim(dt) {
       }
       if (rollTempo < 0.03 && s.schuetteln <= 0) {
         s.vx = s.vy = 0; s.still += dt;
-        if (s.still > 0.5 && !s.ruheGemeldet) { s.ruheGemeldet = true; s.zustand = "ruhe"; zoneWechseln(b, s); sende(b, "ruhe"); }
+        if (s.still > 0.5 && !s.ruheGemeldet) { s.ruheGemeldet = true; s.zustand = "ruhe"; sende(b, "ruhe"); }
       } else s.still = 0;
     }
     if (s.zustand === "gehalten" && s.hand == null && s.halten > 0) {
@@ -1010,6 +1024,7 @@ function schritt_sim(dt) {
     // fortlaufende Werte wie beim echten Sensor
     let zielBewegung = 0;
     if (s.zustand === "gehalten" && s.hand) zielBewegung = clamp(s.hand.tempo / 3, 0, 1);
+    if (s.zustand === "gehalten" && s.traeger && spiel) zielBewegung = clamp((spielerVon(s.traeger)?.tempo || 0) / 4, 0, 0.5);
     if (s.zustand === "rollen") zielBewegung = clamp(rollTempo * 0.12, 0, 0.4);
     if (s.schuetteln > 0) { s.schuetteln -= dt; zielBewegung = Math.max(zielBewegung, 0.9 + Math.random() * 0.1); }
     if (s.zustand !== "flug") {
@@ -1089,6 +1104,7 @@ function zeichne() {
   }
   if (live.an) stift.fillText("Der echte Ball steht in der Mitte", px(0) + 6, py(0) + 6);
 
+  zeichneSpiel();
   const reihen = zu.baelle.map((b) => [b, simBall(b)]).sort((a, c) => a[1].z - c[1].z);
   for (const [b, s] of reihen) {
     const o = ballOrt(b, s), r0 = ballRadius(b);
@@ -1165,6 +1181,8 @@ feld.addEventListener("pointerdown", (ev) => {
   waehle(b.id);
   const s = simBall(b);
   if (s.zustand === "flug") landung(b, s);
+  if (spiel) for (const q of spiel.spieler) if (q.ball === b.id) q.ball = null;
+  s.traeger = null; s.fangSpieler = null;
   s.zustand = "gehalten"; s.z = HAND; s.vx = s.vy = s.vz = 0; s.ruheGemeldet = false;
   s.hand = { spur: [{ t: performance.now(), x: s.x, y: s.y }], tempo: 0 };
   griff = { b, s, id: ev.pointerId };
@@ -1319,6 +1337,171 @@ $("#datei").addEventListener("change", (ev) => {
 $("#zuruecksetzen").addEventListener("click", () => { uebernimm(beispiel()); melde("Beispiel mit drei Bällen wiederhergestellt."); });
 
 // ---------------------------------------------------------------------------
+// Beispiel-Gameplay: drei Spieler, vier Bälle, etwa eine Minute.
+// Folgt dem Szenario „Klangfeld“: Puls, Hochwerfen, Rollen, Pässe mit Echo,
+// Bodenzonen wechseln die Harmonie, Zusammenrücken, Ausklang.
+// ---------------------------------------------------------------------------
+const LICHT = [{ x: 1.2, y: 5.2 }, { x: 3.0, y: 5.4 }, { x: 5.0, y: 5.4 }, { x: 6.8, y: 5.2 }];
+let spiel = null;
+
+function spielerVon(n) { return spiel?.spieler.find((p) => p.name === n); }
+function geh(n, x, y) { const p = spielerVon(n); p.zx = x; p.zy = y; }
+function ballNr(i) { return zu.baelle.find((b) => b.id === i); }
+function haende(p) { return { x: p.x + 0.28, y: p.y }; }
+
+function nimm(n, id) {
+  const p = spielerVon(n), b = ballNr(id), s = simBall(b);
+  for (const q of spiel.spieler) if (q.ball === id) q.ball = null;
+  p.ball = id; s.traeger = n; s.zustand = "gehalten"; s.halten = 0; s.hand = null; s.vx = s.vy = s.vz = 0; s.ruheGemeldet = false;
+}
+function loslassen_(n) { const p = spielerVon(n), s = simBall(ballNr(p.ball)); s.traeger = null; p.ball = null; return s; }
+function hochwerfen(n, T) {
+  const p = spielerVon(n), b = ballNr(p.ball), s = loslassen_(n);
+  s.fangSpieler = n; s.z = HAND; abflug(b, s, 0, 0, (G * T) / 2, HAND);
+}
+function passen(von, nach, T) {
+  const p = spielerVon(von), q = spielerVon(nach), b = ballNr(p.ball), s = loslassen_(von), ziel = haende(q);
+  s.fangSpieler = nach; s.z = HAND;
+  abflug(b, s, (ziel.x - s.x) / T, (ziel.y - s.y) / T, (G * T) / 2, HAND);
+}
+function aufBoden(n, x, y, T) {
+  const p = spielerVon(n), b = ballNr(p.ball), s = loslassen_(n);
+  s.fangSpieler = null; s.z = HAND;
+  abflug(b, s, (x - s.x) / T, (y - s.y) / T, (G * T * T / 2 - HAND) / T);
+}
+function rollen_(n, x, y) {
+  const p = spielerVon(n), b = ballNr(p.ball), s = loslassen_(n), typ = typVon(b);
+  const dx = x - s.x, dy = y - s.y, weg = Math.hypot(dx, dy) || 1, v = Math.sqrt(2 * typ.reibung * weg);
+  s.z = 0; s.zustand = "rollen"; s.still = 0; s.vx = (dx / weg) * v; s.vy = (dy / weg) * v;
+  sende(b, "stoss", { staerke: 0.7 });
+}
+function fallenLassen(n) { const p = spielerVon(n), b = ballNr(p.ball), s = loslassen_(n); s.fangSpieler = null; s.z = HAND; abflug(b, s, 0, 0, 0); }
+function ablegen(n) { const p = spielerVon(n), s = loslassen_(n); s.z = 0; s.zustand = "rollen"; s.still = 0; s.vx = s.vy = 0; }
+function streicheln(n, dauer) {     // das Mikro im Ball hört jede Berührung
+  const p = spielerVon(n), b = ballNr(p.ball), s = simBall(b);
+  s.schuetteln = dauer;
+  for (let t = 0; t < dauer; t += 0.32) spiel.extra.push({ t: spiel.t + t, tun: () => sende(b, "stoss", { staerke: 0.35 + 0.3 * Math.random() }) });
+}
+function erzaehle(text) { const el = $("#szene-text"); el.hidden = false; el.textContent = text; }
+
+const DREHBUCH = [
+  [0.0, () => erzaehle("Die vier Bälle liegen auf Lichtpunkten. Ein leiser Puls läuft. Drei Spieler kommen herein.")],
+  [1.0, () => { geh("A", LICHT[0].x, LICHT[0].y - 0.4); geh("B", LICHT[1].x, LICHT[1].y - 0.4); }],
+  [3.6, () => { nimm("A", 1); erzaehle("A hebt den Softball auf …"); geh("A", 2.4, 2.8); }],
+  [5.4, () => { hochwerfen("A", 0.8); erzaehle("… und wirft ihn hoch. Abflug = Ton, Landung je nach Wurfhöhe."); }],
+  [7.0, () => hochwerfen("A", 1.3)],
+  [8.8, () => { nimm("B", 2); geh("B", 5.4, 3.2); erzaehle("B nimmt den Medizinball."); }],
+  [11.4, () => { rollen_("B", 2.9, 2.6); erzaehle("B rollt ihn zu A: der Bass setzt ein, die Drehung öffnet den Filter."); }],
+  [13.5, () => geh("B", 5.6, 2.6)],
+  [15.0, () => { passen("A", "B", 0.9); erzaehle("Pässe zwischen A und B: jeder gefangene Pass hallt im Takt seiner Flugzeit nach."); }],
+  [16.6, () => passen("B", "A", 0.9)],
+  [18.2, () => passen("A", "B", 1.1)],
+  [20.0, () => { aufBoden("B", 6.6, 1.2, 1.0); erzaehle("B wirft den Softball nach hinten rechts. Er landet in Zone F: die Harmonie wechselt."); }],
+  [21.0, () => { geh("C", LICHT[3].x, LICHT[3].y - 0.4); }],
+  [23.6, () => { nimm("C", 4); geh("C", 4.2, 3.9); erzaehle("C holt den Haar-Ball."); }],
+  [26.0, () => { streicheln("C", 3.2); erzaehle("C streichelt ihn: jede Berührung raschelt, die Bewegung macht es lauter."); }],
+  [29.6, () => { ablegen("C"); geh("C", LICHT[2].x, LICHT[2].y - 0.4); }],
+  [31.6, () => { nimm("C", 3); geh("C", 5.4, 2.6); erzaehle("C nimmt den Tennisball."); }],
+  [33.4, () => { fallenLassen("C"); erzaehle("C lässt ihn aufspringen: jeder Aufprall ein Schlag, immer schneller."); }],
+  [35.6, () => { nimm("C", 3); }],
+  [36.0, () => { aufBoden("C", 1.8, 4.6, 0.9); erzaehle("Wurf nach vorne links, Zone G: die Harmonie wechselt wieder."); geh("A", 2.1, 4.2); geh("B", 6.5, 1.6); }],
+  [38.4, () => { nimm("A", 3); nimm("B", 1); geh("C", 4.2, 3.9); }],
+  [40.2, () => { nimm("C", 4); erzaehle("Alle rücken zusammen. Die Bälle kommen nah zueinander, der Hall wird trocken.");
+    geh("A", 3.3, 3.0); geh("B", 4.3, 2.6); geh("C", 3.9, 3.6); }],
+  [44.5, () => { hochwerfen("A", 0.7); }],
+  [45.4, () => { hochwerfen("B", 0.9); }],
+  [46.6, () => { erzaehle("Zum Schluss legen alle ihre Bälle zurück auf die Lichtpunkte. Die Stimmen verklingen nacheinander.");
+    geh("A", LICHT[2].x, LICHT[2].y - 0.4); geh("B", LICHT[0].x, LICHT[0].y - 0.4); geh("C", LICHT[3].x, LICHT[3].y - 0.4); }],
+  [50.0, () => { ablegen("A"); ablegen("B"); ablegen("C"); }],
+  [51.0, () => { geh("A", 3.2, 1.0); geh("B", 1.2, 1.0); geh("C", 6.8, 1.0); }],
+  [54.0, () => { zu.raum.puls = false; $("#raum-puls").checked = false; erzaehle("Ende. Die Bälle bleiben im Feld, du kannst einfach weiterspielen."); }],
+  [56.0, () => spielEnde()],
+];
+
+function spielStart() {
+  audioStart();
+  allesStumm();
+  const ball = (id, typ) => { const b = neuerBall(id, typ); b.kanal = id; return b; };
+  zu = { grundton: 48, skala: "moll_pentatonik", palette: "Material",
+    raum: { zonen: "akkorde", abstand: "hall", echo: true, puls: true },
+    baelle: [ball(1, "softball"), ball(2, "medizinball"), ball(3, "tennisball"), ball(4, "haarball")] };
+  harmonie = 0;
+  for (const k of Object.keys(sim)) delete sim[k];
+  zu.baelle.forEach((b, i) => { const s = simBall(b); s.x = LICHT[i].x; s.y = LICHT[i].y; });
+  spiel = { t: 0, schritt: 0, extra: [], spieler: [
+    { name: "A", x: 0.6, y: 0.6, zx: 0.6, zy: 0.6, ball: null },
+    { name: "B", x: 0.6, y: 1.4, zx: 0.6, zy: 1.4, ball: null },
+    { name: "C", x: 7.4, y: 0.6, zx: 7.4, zy: 0.6, ball: null }] };
+  gewaehlt = 1;
+  $("#palette").value = zu.palette; $("#raum-zonen").value = "akkorde"; $("#raum-abstand").value = "hall";
+  $("#raum-echo").checked = true; $("#raum-puls").checked = true; $("#grundton").value = "48"; $("#skala").value = zu.skala;
+  zeichneZuordnung(); geaendert();
+  $("#beispiel").textContent = "Beispiel stoppen";
+  protokolliere(zu.baelle[0], { art: "start" }, "Beispiel-Gameplay mit 4 Bällen");
+}
+function spielEnde() {
+  if (!spiel) return;
+  for (const p of spiel.spieler) if (p.ball) loslassen_(p.name);
+  spiel = null;
+  $("#beispiel").textContent = "Beispiel-Gameplay (4 Bälle)";
+  setTimeout(() => { if (!spiel) $("#szene-text").hidden = true; }, 4000);
+}
+function allesStumm() {
+  if (!ctx) return;
+  Object.values(zuege).forEach((z) => [...z.stimmen].forEach((st) => st.stop()));
+  Object.keys(gehalten).forEach((k) => delete gehalten[k]);
+}
+
+function spielSchritt(dt) {
+  if (!spiel) return;
+  spiel.t += dt;
+  while (spiel && spiel.schritt < DREHBUCH.length && DREHBUCH[spiel.schritt][0] <= spiel.t) { const tun = DREHBUCH[spiel.schritt][1]; spiel.schritt++; tun(); }
+  if (!spiel) return;
+  spiel.extra = spiel.extra.filter((e) => { if (e.t <= spiel.t) { e.tun(); return false; } return true; });
+  for (const p of spiel.spieler) {
+    const dx = p.zx - p.x, dy = p.zy - p.y, weg = Math.hypot(dx, dy), v = Math.min(weg, 1.7 * dt);
+    p.tempo = weg > 0.01 ? 1.7 : 0;
+    if (weg > 0.001) { p.x += (dx / weg) * v; p.y += (dy / weg) * v; }
+  }
+}
+
+// Puls: ein leises Klicken im Takt, die Eins etwas lauter
+let naechsterPuls = 0, pulsZaehler = 0;
+function pulsPlanen() {
+  if (!ctx || !tonAn || !zu.raum?.puls) { naechsterPuls = 0; return; }
+  const schlag = 60 / 90;
+  if (naechsterPuls < ctx.currentTime) { naechsterPuls = ctx.currentTime + 0.05; pulsZaehler = 0; }
+  while (naechsterPuls < ctx.currentTime + 0.12) {
+    const q = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), t = naechsterPuls;
+    q.buffer = rauschPuffer; f.type = "bandpass"; f.frequency.value = pulsZaehler % 4 === 0 ? 2200 : 3800; f.Q.value = 3;
+    const pegel = pulsZaehler % 4 === 0 ? 0.09 : 0.05;
+    g.gain.setValueAtTime(pegel, t); g.gain.exponentialRampToValueAtTime(0.0005, t + 0.04);
+    q.connect(f); f.connect(g); g.connect(master); q.start(t); q.stop(t + 0.05);
+    naechsterPuls += schlag; pulsZaehler++;
+  }
+}
+
+function zeichneSpiel() {
+  if (!spiel) return;
+  for (const l of LICHT) {
+    stift.fillStyle = "rgba(255,240,170,0.18)"; stift.beginPath(); stift.arc(px(l.x), py(l.y), 0.32 * massstab, 0, Math.PI * 2); stift.fill();
+    stift.strokeStyle = "rgba(255,240,170,0.6)"; stift.lineWidth = 1.5; stift.stroke();
+  }
+  stift.font = `700 ${Math.max(11, pw / 50)}px Atkinson Hyperlegible, sans-serif`; stift.textAlign = "center"; stift.textBaseline = "middle";
+  for (const p of spiel.spieler) {
+    const r = 0.26 * massstab;
+    stift.fillStyle = "rgba(255,255,255,0.88)"; stift.beginPath(); stift.arc(px(p.x), py(p.y), r, 0, Math.PI * 2); stift.fill();
+    stift.fillStyle = "#142019"; stift.fillText(p.name, px(p.x), py(p.y) + 1);
+  }
+  stift.textAlign = "left"; stift.textBaseline = "top";
+}
+
+$("#beispiel").addEventListener("click", () => { if (spiel) { spielEnde(); allesStumm(); } else spielStart(); });
+$("#raum-echo").addEventListener("change", (ev) => { zu.raum.echo = ev.target.checked; geaendert(); });
+$("#raum-puls").addEventListener("change", (ev) => { audioStart(); zu.raum.puls = ev.target.checked; geaendert(); });
+$("#raum-echo").checked = !!zu.raum.echo; $("#raum-puls").checked = !!zu.raum.puls;
+
+// ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
 leseFarben();
@@ -1345,7 +1528,9 @@ function raumBerechnen() {
 let letzteZeit = performance.now(), letzteWerte = 0;
 function schleife(t) {
   const dt = Math.min(0.05, (t - letzteZeit) / 1000); letzteZeit = t; jetzt += dt;
+  spielSchritt(dt);
   schritt_sim(dt);
+  pulsPlanen();
   for (const b of zu.baelle) {   // echter Ball im Flug: hebt sich in der Mitte des Felds
     const s = simBall(b);
     if (s.liveFlug != null) { const f = (performance.now() - s.liveFlug) / 1000; s.z = Math.min(2.5, 3 * f); }
