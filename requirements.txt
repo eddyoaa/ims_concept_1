@@ -4,3 +4,6 @@ numpy
 scipy
 sounddevice
 python-osc
+mido
+python-rtmidi
+pyserial

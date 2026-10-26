@@ -1,0 +1,1122 @@
+<title>Ball-Klangzuordnung</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: links das Spielfeld (Hallenboden, bleibt stehen), rechts die Zuordnung je Ball zum Durchscrollen */
+:root {
+  --grund: #edf0ee;
+  --karte: #fbfcfb;
+  --tinte: #142019;
+  --leise: #56645c;
+  --rand: #d0d8d3;
+  --akzent: #0f6b5a;
+  --akzent-text: #ffffff;
+  --akzent-zart: #d6ebe5;
+  --feld: #2c6e63;
+  --feld-linie: rgba(255, 255, 255, 0.78);
+  --feld-schrift: rgba(255, 255, 255, 0.72);
+  --warn: #a8501a;
+  --blitz: #f4c430;
+  --schatten: rgba(9, 25, 20, 0.08);
+
+  --schrift-titel: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --schrift: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --schrift-daten: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --grund: #0e1513; --karte: #16201d; --tinte: #e4ebe7; --leise: #95a59d; --rand: #2b3834;
+    --akzent: #4fc2a6; --akzent-text: #06231c; --akzent-zart: #173a32;
+    --feld: #1d4a42; --feld-linie: rgba(255, 255, 255, 0.55); --feld-schrift: rgba(255, 255, 255, 0.6);
+    --warn: #e08a52; --blitz: #e8b923; --schatten: rgba(0, 0, 0, 0.3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --grund: #0e1513; --karte: #16201d; --tinte: #e4ebe7; --leise: #95a59d; --rand: #2b3834;
+  --akzent: #4fc2a6; --akzent-text: #06231c; --akzent-zart: #173a32;
+  --feld: #1d4a42; --feld-linie: rgba(255, 255, 255, 0.55); --feld-schrift: rgba(255, 255, 255, 0.6);
+  --warn: #e08a52; --blitz: #e8b923; --schatten: rgba(0, 0, 0, 0.3);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--grund); color: var(--tinte);
+  font: 15px/1.5 var(--schrift);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px 40px;
+}
+h1, h2, h3 { font-family: var(--schrift-titel); text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2.1rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
+h2 { font-size: 1.15rem; font-weight: 600; }
+.etikett { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--leise); font-weight: 700; }
+.daten { font-family: var(--schrift-daten); font-variant-numeric: tabular-nums; }
+button, select, input, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
+
+/* Kopf */
+.kopf { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: end; justify-content: space-between; max-width: 1400px; margin: 0 auto 18px; }
+.kopf p { margin: 6px 0 0; color: var(--leise); max-width: 60ch; }
+.steuer { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.feldchen { display: grid; gap: 3px; }
+.knopf {
+  border: 1px solid var(--rand); background: var(--karte); border-radius: 8px;
+  padding: 7px 12px; cursor: pointer; line-height: 1.2; min-height: 36px;
+}
+.knopf:hover { border-color: var(--akzent); }
+.knopf.haupt { background: var(--akzent); color: var(--akzent-text); border-color: transparent; font-weight: 700; }
+.knopf.klein { min-height: 30px; padding: 4px 10px; font-size: 0.85rem; }
+select, input[type="number"], input[type="text"] {
+  border: 1px solid var(--rand); background: var(--karte); border-radius: 7px; padding: 6px 8px; min-height: 34px;
+}
+select:disabled { opacity: 0.4; }
+.status { display: inline-flex; align-items: center; gap: 7px; font-size: 0.85rem; padding: 6px 11px; border-radius: 999px; background: var(--akzent-zart); }
+.status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--leise); }
+.status.live::before { background: var(--akzent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--akzent) 30%, transparent); }
+.status.weg::before { background: var(--warn); }
+
+/* Hauptraster */
+.raster { display: grid; gap: 22px; max-width: 1400px; margin: 0 auto; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1000px) {
+  .raster { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: start; }
+  .spiel { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+}
+.spiel, .zuordnung { display: grid; gap: 14px; min-width: 0; }
+
+.feldrahmen { border-radius: 12px; overflow: hidden; background: var(--feld); box-shadow: 0 1px 0 var(--schatten), 0 10px 30px var(--schatten); }
+canvas#feld { display: block; width: 100%; aspect-ratio: 4 / 3; max-width: 100%; touch-action: none; cursor: grab; }
+canvas#feld.greift { cursor: grabbing; }
+.hinweis { font-size: 0.85rem; color: var(--leise); margin: 0; }
+
+.aktionen { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.aktionen .feldchen { margin-right: 4px; }
+
+.protokoll { background: var(--karte); border: 1px solid var(--rand); border-radius: 10px; padding: 10px 12px; min-height: 120px; }
+.protokoll ol { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 3px; }
+.protokoll li { display: grid; grid-template-columns: 4.6em 1em minmax(0, 1fr); gap: 8px; align-items: baseline; font-size: 0.88rem; }
+.protokoll li .zeit { color: var(--leise); font-size: 0.78rem; }
+.punkt { width: 0.75em; height: 0.75em; border-radius: 50%; display: inline-block; align-self: center; }
+.protokoll .folge { color: var(--akzent); font-weight: 700; }
+.protokoll .leer { color: var(--leise); font-size: 0.88rem; margin: 6px 0 0; }
+
+/* Ballkarten */
+.zuordnung-kopf { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; justify-content: space-between; }
+.ball {
+  background: var(--karte); border: 1px solid var(--rand); border-radius: 12px;
+  padding: 14px; display: grid; gap: 12px;
+}
+.ball.aus { opacity: 0.55; }
+.ball-kopf { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.ball-kopf .name { flex: 1 1 110px; min-width: 0; font-weight: 700; }
+.ball-kopf .name input { width: 100%; font-weight: 700; }
+input[type="color"] { width: 36px; height: 34px; border: 1px solid var(--rand); border-radius: 7px; padding: 2px; background: var(--karte); cursor: pointer; }
+.kanal input { width: 4.2em; }
+.schalter { display: inline-flex; gap: 6px; align-items: center; min-height: 34px; font-size: 0.9rem; }
+.messer { display: grid; grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr); gap: 4px 8px; align-items: center; font-size: 0.78rem; color: var(--leise); }
+.balken { height: 6px; border-radius: 3px; background: var(--rand); overflow: hidden; }
+.balken i { display: block; height: 100%; width: 0; background: var(--akzent); }
+.zustand { font-size: 0.78rem; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--rand); color: var(--leise); }
+.zustand.flug { border-color: var(--akzent); color: var(--akzent); font-weight: 700; }
+
+.zeilen { display: grid; gap: 2px; }
+.zeile {
+  display: grid; grid-template-columns: minmax(0, 8.5em) minmax(0, 1fr) minmax(0, 1fr) 6.6em;
+  gap: 8px; align-items: center; padding: 5px 6px; border-radius: 8px;
+  transition: background-color 0.5s;
+}
+.zeile.stetig { grid-template-columns: minmax(0, 8.5em) minmax(0, 1fr); }
+.zeile .was b { display: block; font-size: 0.92rem; }
+.zeile .was small { display: block; color: var(--leise); font-size: 0.75rem; line-height: 1.25; }
+.zeile select { width: 100%; min-width: 0; }
+.zeile.feuer { background: color-mix(in srgb, var(--blitz) 40%, transparent); transition: none; }
+.gruppe { margin-top: 6px; }
+.knopfreihe { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 560px) {
+  .zeile { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .zeile .was { grid-column: 1 / -1; }
+  .zeile.stetig .was { grid-column: auto; }
+}
+
+.planung { border: 1px dashed var(--rand); border-radius: 10px; padding: 10px 12px; font-size: 0.88rem; color: var(--leise); }
+.planung b { color: var(--tinte); }
+details.json { background: var(--karte); border: 1px solid var(--rand); border-radius: 10px; padding: 10px 12px; }
+details.json summary { cursor: pointer; font-weight: 700; }
+details.json textarea { width: 100%; min-height: 220px; margin-top: 10px; font: 0.8rem/1.4 var(--schrift-daten); background: var(--grund); border: 1px solid var(--rand); border-radius: 8px; padding: 8px; }
+.meldung { font-size: 0.85rem; color: var(--akzent); min-height: 1.3em; }
+
+@media (prefers-reduced-motion: reduce) { .zeile { transition: none; } }
+</style>
+
+<header class="kopf">
+  <div>
+    <h1>Ball-Klangzuordnung</h1>
+    <p>Welcher Ball klingt wie, und was passiert beim Werfen, Fangen, Rollen? Im Feld ausprobieren, rechts zuordnen.</p>
+  </div>
+  <div class="steuer">
+    <span class="status" id="status">Simulation</span>
+    <label class="feldchen"><span class="etikett">Grundton</span><select id="grundton"></select></label>
+    <label class="feldchen"><span class="etikett">Tonleiter</span><select id="skala"></select></label>
+    <button class="knopf haupt" id="ton" type="button">Ton einschalten</button>
+  </div>
+</header>
+
+<main class="raster">
+  <section class="spiel" aria-label="Spielfeld">
+    <div class="feldrahmen"><canvas id="feld" aria-label="Spielfeld von oben. Bälle ziehen und loslassen zum Werfen oder Rollen."></canvas></div>
+    <p class="hinweis">Ball ziehen und schnell loslassen = werfen, langsam = rollen. Fliegenden Ball antippen = fangen.</p>
+    <div class="aktionen">
+      <label class="feldchen"><span class="etikett">Ball</span><select id="auswahl"></select></label>
+      <button class="knopf klein" type="button" data-sim="werfen">Werfen</button>
+      <button class="knopf klein" type="button" data-sim="hoch">Hochwerfen und fangen</button>
+      <button class="knopf klein" type="button" data-sim="fallen">Fallen lassen</button>
+      <button class="knopf klein" type="button" data-sim="rollen">Rollen</button>
+      <button class="knopf klein" type="button" data-sim="kick">Kick</button>
+      <button class="knopf klein" type="button" data-sim="schuetteln">Schütteln</button>
+    </div>
+    <div class="protokoll" aria-live="polite">
+      <span class="etikett">Was passiert ist</span>
+      <ol id="protokoll"></ol>
+      <p class="leer" id="protokoll-leer">Noch nichts. Zieh einen Ball und lass ihn los.</p>
+    </div>
+  </section>
+
+  <section class="zuordnung" aria-label="Zuordnung">
+    <div class="zuordnung-kopf">
+      <h2>Bälle und was sie auslösen</h2>
+      <div class="knopfreihe">
+        <select id="neu-typ" aria-label="Balltyp für neuen Ball"></select>
+        <button class="knopf" id="neu" type="button">Ball hinzufügen</button>
+      </div>
+    </div>
+    <div id="baelle" class="zuordnung"></div>
+    <div class="planung">
+      <b>Noch ohne Sensor:</b> Pass zwischen zwei Personen, Abstand der Personen, Landezone im Raum.
+      „Nach Landeplatz“ funktioniert deshalb nur hier in der Simulation (links tief, rechts hoch). Der echte Ball nimmt stattdessen den nächsten Skalenton.
+    </div>
+    <details class="json">
+      <summary>Zuordnung als Datei (für ball.py)</summary>
+      <p class="hinweis">Kopieren, als <span class="daten">zuordnung.json</span> speichern und <span class="daten">python ball.py --zuordnung zuordnung.json</span> starten. Ist die Seite über ball.py geöffnet, geht jede Änderung automatisch an den MIDI-Ausgang.</p>
+      <textarea id="json" spellcheck="false" aria-label="Zuordnung als JSON"></textarea>
+      <div class="knopfreihe">
+        <button class="knopf klein" id="kopieren" type="button">Kopieren</button>
+        <button class="knopf klein" id="uebernehmen" type="button">Text übernehmen</button>
+        <label class="knopf klein">Datei laden <input id="datei" type="file" accept=".json,application/json" hidden></label>
+        <button class="knopf klein" id="zuruecksetzen" type="button">Beispiel wiederherstellen</button>
+      </div>
+      <div class="meldung" id="meldung"></div>
+    </details>
+  </section>
+</main>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------------------
+// Begriffe (dieselben Namen wie in ball.py)
+// ---------------------------------------------------------------------------
+const SKALEN = {
+  moll_pentatonik: [0, 3, 5, 7, 10], dur_pentatonik: [0, 2, 4, 7, 9], dur: [0, 2, 4, 5, 7, 9, 11],
+  moll: [0, 2, 3, 5, 7, 8, 10], blues: [0, 3, 5, 6, 7, 10], ganzton: [0, 2, 4, 6, 8, 10],
+  chromatisch: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+};
+const SKALEN_NAMEN = {
+  moll_pentatonik: "Moll-Pentatonik", dur_pentatonik: "Dur-Pentatonik", dur: "Dur", moll: "Moll",
+  blues: "Blues", ganzton: "Ganzton", chromatisch: "Chromatisch",
+};
+const NOTENNAMEN = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B", "H"];
+const KLAENGE = { pad: "Fläche", pluck: "Zupfen", bass: "Bass", glocke: "Glocke", perkussion: "Trommel", rauschen: "Rauschen" };
+const AUSLOESER = [
+  ["abflug", "Abflug", "verlässt die Hand"],
+  ["landung", "Landung", "Fang oder Aufprall"],
+  ["stoss", "Stoß", "Kick, Schlag ohne Flug"],
+  ["ruhe", "Ruhe", "liegt still"],
+];
+const FORTLAUFEND = [
+  ["drehung", "Drehung", "Rollen, Drehen"],
+  ["bewegung", "Bewegung", "Schütteln, Tragen"],
+];
+const F_AUSLOESER = { nichts: "nichts", ton: "Ton", ton_halten: "Ton bis Landung", schlag: "Schlag", akkord: "Akkord" };
+const F_RUHE = { stille: "alles verstummt", nichts: "weiterklingen" };
+const F_FORTLAUFEND = { nichts: "nichts", filter: "Filter (dunkel → hell)", lautstaerke: "Lautstärke", tonhoehe: "Tonhöhe biegen", hall: "Hall", vibrato: "Vibrato", verzerrung: "Verzerrung" };
+const TONHOEHE = { skala_schritt: "nächster Skalenton", zufall: "zufällig aus Tonleiter", flughoehe: "nach Wurfhöhe", fest: "Grundton", ort: "nach Landeplatz" };
+
+// Balltypen: Physik für die Simulation und ein Vorschlag, wie er klingen könnte
+const TYPEN = {
+  softball:   { name: "Softball",   farbe: "#e4572e", d: 0.18, sprung: 0.45, reibung: 1.6, wurf: 1.0, klang: "pad", oktave: 0,
+    aktionen: { abflug: ["ton_halten", "skala_schritt", 0], landung: ["schlag", "flughoehe", 1], stoss: ["schlag", "fest", -1], ruhe: ["stille"], drehung: ["filter"], bewegung: ["lautstaerke"] } },
+  tennisball: { name: "Tennisball", farbe: "#c8d93a", d: 0.067, sprung: 0.72, reibung: 0.8, wurf: 1.1, klang: "pluck", oktave: 1,
+    aktionen: { abflug: ["nichts", "skala_schritt", 0], landung: ["ton", "flughoehe", 0], stoss: ["schlag", "zufall", 0], ruhe: ["nichts"], drehung: ["vibrato"], bewegung: ["nichts"] } },
+  medizinball:{ name: "Medizinball", farbe: "#6b4a34", d: 0.30, sprung: 0.08, reibung: 3.2, wurf: 0.5, klang: "bass", oktave: -1,
+    aktionen: { abflug: ["nichts", "fest", 0], landung: ["schlag", "fest", 0], stoss: ["schlag", "fest", 0], ruhe: ["nichts"], drehung: ["filter"], bewegung: ["nichts"] } },
+  noppenball: { name: "Noppenball", farbe: "#7b4fd6", d: 0.15, sprung: 0.55, reibung: 2.6, wurf: 0.9, klang: "rauschen", oktave: 1,
+    aktionen: { abflug: ["nichts", "zufall", 0], landung: ["schlag", "zufall", 0], stoss: ["schlag", "zufall", 0], ruhe: ["stille"], drehung: ["verzerrung"], bewegung: ["filter"] } },
+  wasserball: { name: "Wasserball", farbe: "#2a8fd6", d: 0.40, sprung: 0.5, reibung: 1.0, wurf: 0.8, klang: "glocke", oktave: 1,
+    aktionen: { abflug: ["akkord", "skala_schritt", 0], landung: ["ton", "flughoehe", 0], stoss: ["nichts", "fest", 0], ruhe: ["nichts"], drehung: ["hall"], bewegung: ["nichts"] } },
+  basketball: { name: "Basketball", farbe: "#e07b24", d: 0.24, sprung: 0.75, reibung: 0.9, wurf: 0.9, klang: "perkussion", oktave: -1,
+    aktionen: { abflug: ["nichts", "fest", 0], landung: ["schlag", "flughoehe", 0], stoss: ["schlag", "fest", 0], ruhe: ["nichts"], drehung: ["nichts"], bewegung: ["nichts"] } },
+};
+
+const RAUM_B = 8, RAUM_T = 6, G = 9.81, HAND = 1.0;
+const SPEICHER = "ballklang-zuordnung-v1";
+
+function aktionenAusTyp(typ) {
+  const a = {};
+  for (const [k, v] of Object.entries(TYPEN[typ].aktionen)) {
+    a[k] = { funktion: v[0] };
+    if (v.length > 1) { a[k].tonhoehe = v[1]; a[k].oktave = v[2]; }
+  }
+  return a;
+}
+function neuerBall(id, typ) {
+  const t = TYPEN[typ];
+  return { id, name: t.name, typ, farbe: t.farbe, klang: t.klang, kanal: id, oktave: t.oktave, aktiv: true, aktionen: aktionenAusTyp(typ) };
+}
+function beispiel() {
+  return { grundton: 48, skala: "moll_pentatonik", baelle: [neuerBall(1, "softball"), neuerBall(2, "tennisball"), neuerBall(3, "medizinball")] };
+}
+
+let zu = beispiel();
+try {
+  const gespeichert = JSON.parse(localStorage.getItem(SPEICHER) || "null");
+  if (gespeichert && Array.isArray(gespeichert.baelle)) zu = gespeichert;
+} catch (e) { /* ohne Speicher geht es auch */ }
+
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const $ = (s, el = document) => el.querySelector(s);
+const ballVon = (id) => zu.baelle.find((b) => b.id === id);
+const typVon = (b) => TYPEN[b.typ] || TYPEN.softball;
+
+function notenName(n) { return NOTENNAMEN[n % 12] + (Math.floor(n / 12) - 1); }
+function komma(x, stellen = 2) { return x.toFixed(stellen).replace(".", ","); }
+
+// ---------------------------------------------------------------------------
+// Klang (Web Audio): je Ball ein Kanalzug, je Ton eine Stimme
+// ---------------------------------------------------------------------------
+let ctx = null, master = null, hallBus = null, rauschPuffer = null, tonAn = false;
+const zuege = {};
+
+function audioStart() {
+  if (ctx) { if (ctx.state === "suspended") ctx.resume(); return; }
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const komp = ctx.createDynamicsCompressor();
+  komp.threshold.value = -14; komp.ratio.value = 4;
+  komp.connect(ctx.destination);
+  master = ctx.createGain(); master.gain.value = 0.8; master.connect(komp);
+  const hall = ctx.createConvolver();
+  const laenge = ctx.sampleRate * 2.4, ir = ctx.createBuffer(2, laenge, ctx.sampleRate);
+  for (let k = 0; k < 2; k++) {
+    const d = ir.getChannelData(k);
+    for (let i = 0; i < laenge; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / laenge, 2.6);
+  }
+  hall.buffer = ir;
+  hallBus = ctx.createGain(); hallBus.gain.value = 0.6; hallBus.connect(hall); hall.connect(komp);
+  rauschPuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+  const r = rauschPuffer.getChannelData(0);
+  for (let i = 0; i < r.length; i++) r[i] = Math.random() * 2 - 1;
+  tonAn = true;
+  zeigeTon();
+}
+
+function zug(b) {
+  if (zuege[b.id]) return zuege[b.id];
+  const z = { stimmen: new Set(), bend: 0, drive: -1 };
+  z.eingang = ctx.createGain();
+  z.shaper = ctx.createWaveShaper();
+  z.filter = ctx.createBiquadFilter(); z.filter.type = "lowpass"; z.filter.Q.value = 2;
+  z.vol = ctx.createGain();
+  z.hall = ctx.createGain();
+  z.pan = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
+  z.eingang.connect(z.shaper); z.shaper.connect(z.filter); z.filter.connect(z.vol); z.vol.connect(z.pan); z.pan.connect(master);
+  z.vol.connect(z.hall); z.hall.connect(hallBus);
+  z.lfo = ctx.createOscillator(); z.lfo.frequency.value = 5.5;
+  z.lfoTiefe = ctx.createGain(); z.lfoTiefe.gain.value = 0;
+  z.lfo.connect(z.lfoTiefe); z.lfo.start();
+  zuege[b.id] = z;
+  grundwerte(b);
+  return z;
+}
+
+function setzeDrive(z, menge) {
+  if (Math.abs(menge - z.drive) < 0.04) return;
+  z.drive = menge;
+  const k = menge * 40, n = 512, kurve = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; kurve[i] = k > 0 ? Math.tanh(x * (1 + k)) / Math.tanh(1 + k) : x; }
+  z.shaper.curve = kurve;
+}
+
+// Was nicht zugeordnet ist, steht auf einem festen Wert
+function grundwerte(b) {
+  if (!ctx || !zuege[b.id]) return;
+  const z = zuege[b.id], t = ctx.currentTime, belegt = new Set(FORTLAUFEND.map(([k]) => b.aktionen[k]?.funktion));
+  if (!belegt.has("filter")) z.filter.frequency.setTargetAtTime(b.klang === "bass" ? 1400 : 4200, t, 0.05);
+  if (!belegt.has("lautstaerke")) z.vol.gain.setTargetAtTime(0.85, t, 0.05);
+  if (!belegt.has("hall")) z.hall.gain.setTargetAtTime(0.25, t, 0.05);
+  if (!belegt.has("vibrato")) z.lfoTiefe.gain.setTargetAtTime(0, t, 0.05);
+  if (!belegt.has("verzerrung")) setzeDrive(z, 0);
+  if (!belegt.has("tonhoehe")) biege(z, 0);
+  if (z.pan.pan) z.pan.pan.value = clamp((zu.baelle.indexOf(b) - (zu.baelle.length - 1) / 2) * 0.35, -0.7, 0.7);
+}
+
+function biege(z, cent) {
+  z.bend = cent;
+  const t = ctx.currentTime;
+  z.stimmen.forEach((s) => s.oszis.forEach((o) => o.detune.setTargetAtTime(cent + o._det, t, 0.03)));
+}
+
+function frequenz(n) { return 440 * Math.pow(2, (n - 69) / 12); }
+
+// modus: "schlag" (kurz), "ton" (mittel), "halten" (bis stop())
+function stimme(b, note, vel, modus) {
+  if (!ctx || !tonAn) return null;
+  const z = zug(b), t = ctx.currentTime, f = frequenz(note);
+  const pegel = Math.pow(vel / 127, 1.6) * 0.42;
+  const aus = ctx.createGain(); aus.gain.value = 0; aus.connect(z.eingang);
+  const oszis = [], quellen = [];
+  const oszi = (typ, fr, det = 0) => {
+    const o = ctx.createOscillator(); o.type = typ; o.frequency.value = fr;
+    o._det = det; o.detune.value = z.bend + det; z.lfoTiefe.connect(o.detune);
+    oszis.push(o); quellen.push(o); return o;
+  };
+  const rauschen = () => { const q = ctx.createBufferSource(); q.buffer = rauschPuffer; q.loop = true; quellen.push(q); return q; };
+  let anschlag = 0.005, ausklang = 0.35, verfall = null;
+
+  switch (b.klang) {
+    case "pad": {
+      const lp = ctx.createBiquadFilter(); lp.frequency.value = f * 6;
+      oszi("sawtooth", f, -8).connect(lp); oszi("sawtooth", f, 8).connect(lp); oszi("triangle", f / 2).connect(lp);
+      lp.connect(aus);
+      anschlag = modus === "schlag" ? 0.01 : 0.14; ausklang = modus === "schlag" ? 0.4 : 1.0;
+      break;
+    }
+    case "pluck": {
+      const lp = ctx.createBiquadFilter(); lp.Q.value = 3;
+      lp.frequency.setValueAtTime(Math.min(16000, f * 12), t); lp.frequency.exponentialRampToValueAtTime(f * 1.3, t + 0.4);
+      oszi("sawtooth", f).connect(lp); oszi("square", f, 5).connect(lp); lp.connect(aus);
+      anschlag = 0.002; verfall = 0.9; ausklang = 0.25;
+      break;
+    }
+    case "bass": {
+      const lp = ctx.createBiquadFilter(); lp.frequency.value = f * 4;
+      oszi("sine", f).connect(aus); oszi("square", f).connect(lp); lp.connect(aus);
+      anschlag = 0.006; ausklang = 0.3;
+      break;
+    }
+    case "glocke": {
+      const mod = ctx.createOscillator(), modPegel = ctx.createGain();
+      mod.frequency.value = f * 3.5; modPegel.gain.setValueAtTime(f * 2.5, t); modPegel.gain.exponentialRampToValueAtTime(f * 0.1, t + 1.2);
+      const traeger = oszi("sine", f); mod.connect(modPegel); modPegel.connect(traeger.frequency); quellen.push(mod);
+      traeger.connect(aus);
+      anschlag = 0.002; verfall = 2.0; ausklang = 0.6;
+      break;
+    }
+    case "perkussion": {
+      const o = oszi("sine", f);
+      o.frequency.setValueAtTime(f * 2.6, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.07);
+      o.connect(aus);
+      const r = rauschen(), hp = ctx.createBiquadFilter(), rp = ctx.createGain();
+      hp.type = "highpass"; hp.frequency.value = 2500;
+      rp.gain.setValueAtTime(0.5, t); rp.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+      r.connect(hp); hp.connect(rp); rp.connect(aus);
+      anschlag = 0.001; verfall = 0.45; ausklang = 0.2;
+      break;
+    }
+    case "rauschen":
+    default: {
+      const r = rauschen(), bp = ctx.createBiquadFilter(), plus = ctx.createGain();
+      bp.type = "bandpass"; bp.frequency.value = f; bp.Q.value = 9; plus.gain.value = 5;
+      r.connect(bp); bp.connect(plus); plus.connect(aus);
+      anschlag = 0.01; ausklang = 0.45;
+    }
+  }
+
+  const g = aus.gain;
+  g.setValueAtTime(0, t); g.linearRampToValueAtTime(pegel, t + anschlag);
+  let ende = null;
+  if (verfall) {
+    const d = modus === "schlag" ? Math.min(verfall, 0.35) : verfall;
+    g.setTargetAtTime(0, t + anschlag, d / 4); ende = t + anschlag + d * 1.6;
+  } else if (modus === "halten") {
+    g.setTargetAtTime(pegel * 0.75, t + anschlag, 0.15);
+  } else {
+    const halte = modus === "schlag" ? 0.03 : 0.35;
+    g.setTargetAtTime(0, t + anschlag + halte, ausklang / 4); ende = t + anschlag + halte + ausklang * 1.6;
+  }
+  quellen.forEach((q) => q.start(t));
+  const s = { oszis, quellen, beendet: false };
+  const beenden = (wann) => {
+    if (s.beendet) return; s.beendet = true;
+    quellen.forEach((q) => { try { q.stop(wann); } catch (e) { /* schon gestoppt */ } });
+    quellen[0].onended = () => {
+      z.stimmen.delete(s);
+      oszis.forEach((o) => { try { z.lfoTiefe.disconnect(o.detune); } catch (e) { /* schon getrennt */ } });
+      aus.disconnect();
+    };
+  };
+  s.stop = () => {
+    const t2 = ctx.currentTime;
+    g.cancelScheduledValues(t2); g.setValueAtTime(g.value, t2); g.setTargetAtTime(0, t2, ausklang / 4);
+    beenden(t2 + ausklang * 1.6);
+  };
+  if (ende) beenden(ende);
+  z.stimmen.add(s);
+  if (z.stimmen.size > 12) { const aelteste = z.stimmen.values().next().value; aelteste.stop(); }
+  return s;
+}
+
+// ---------------------------------------------------------------------------
+// Ereignisse -> Klang, nach der Zuordnung (gleiche Regeln wie ball.py)
+// ---------------------------------------------------------------------------
+const schritt = {}, gehalten = {};
+
+function skala() { return SKALEN[zu.skala] || SKALEN.moll_pentatonik; }
+function stufe(b, aktion, e) {
+  const n = skala().length, art = aktion.tonhoehe || "skala_schritt";
+  if (art === "fest") return 0;
+  if (art === "zufall") return Math.floor(Math.random() * 2 * n);
+  if (art === "flughoehe" && e.dauer != null) return Math.round(clamp((e.dauer - 0.1) / 1.1, 0, 1) * (2 * n - 1));
+  if (art === "ort" && e.x != null) return Math.round(clamp(e.x, 0, 1) * (2 * n - 1));
+  const s = ((schritt[b.id] ?? -1) + 1) % (2 * n);
+  schritt[b.id] = s; return s;
+}
+function skalenton(b, st, okt) {
+  const sk = skala(), o = Math.floor(st / sk.length), r = st % sk.length;
+  return clamp(zu.grundton + 12 * ((b.oktave || 0) + okt + o) + sk[r], 0, 127);
+}
+function fuerId(id) {
+  const aktive = zu.baelle.filter((b) => b.aktiv !== false);
+  return aktive.find((b) => b.id === id) || (aktive.length === 1 ? aktive[0] : null);
+}
+
+function ereignis(e) {
+  const b = fuerId(e.ball);
+  if (!b) return;
+  let folge = "";
+  if (["landung", "stoss", "abflug"].includes(e.art) && gehalten[b.id]) {
+    gehalten[b.id].forEach((s) => s && s.stop()); delete gehalten[b.id];
+  }
+  const aktion = b.aktionen[e.art] || {}, funktion = aktion.funktion || "nichts";
+  if (e.art === "ruhe") {
+    if (funktion === "stille" && ctx && zuege[b.id]) { zuege[b.id].stimmen.forEach((s) => s.stop()); folge = "alles verstummt"; }
+  } else if (funktion !== "nichts") {
+    const st = stufe(b, aktion, e), okt = aktion.oktave || 0;
+    const noten = funktion === "akkord" ? [0, 2, 4].map((i) => skalenton(b, st + i, okt)) : [skalenton(b, st, okt)];
+    const staerke = e.staerke ?? 0.8;
+    let vel, modus;
+    if (funktion === "schlag") { vel = 50 + Math.round(77 * staerke); modus = "schlag"; }
+    else if (funktion === "ton_halten" && e.art === "abflug") { vel = 100; modus = "halten"; }
+    else { vel = 60 + Math.round(50 * staerke); modus = "ton"; }
+    const stimmen = noten.map((n) => stimme(b, n, clamp(vel, 1, 127), modus));
+    if (modus === "halten") gehalten[b.id] = stimmen;
+    folge = `${F_AUSLOESER[funktion]} ${noten.map(notenName).join(" ")}`;
+  }
+  protokolliere(b, e, folge);
+  blitze(b.id, e.art);
+}
+
+function fortlaufend(id, werte) {
+  const b = fuerId(id);
+  if (!b) return;
+  zeigeMesser(b.id, werte);
+  if (!ctx || !tonAn) return;
+  const z = zug(b), t = ctx.currentTime;
+  for (const [groesse] of FORTLAUFEND) {
+    const w = clamp(werte[groesse] || 0, 0, 1);
+    switch (b.aktionen[groesse]?.funktion) {
+      case "filter": z.filter.frequency.setTargetAtTime(180 * Math.pow(45, w), t, 0.05); break;
+      case "lautstaerke": z.vol.gain.setTargetAtTime(0.08 + 0.92 * w, t, 0.05); break;
+      case "hall": z.hall.gain.setTargetAtTime(w * 0.95, t, 0.08); break;
+      case "vibrato": z.lfoTiefe.gain.setTargetAtTime(w * 70, t, 0.05); break;
+      case "verzerrung": setzeDrive(z, w); break;
+      case "tonhoehe": if (Math.abs(z.bend - w * 1200) > 8) biege(z, w * 1200); break;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Anzeige: Protokoll, Aufblitzen, Messer
+// ---------------------------------------------------------------------------
+const ARTNAMEN = { abflug: "Abflug", landung: "Landung", stoss: "Stoß", ruhe: "Ruhe" };
+const startZeit = performance.now();
+function protokolliere(b, e, folge) {
+  const liste = $("#protokoll");
+  $("#protokoll-leer").hidden = true;
+  const li = document.createElement("li");
+  const s = (performance.now() - startZeit) / 1000;
+  let detail = "";
+  if (e.art === "landung" && e.dauer != null) detail = ` nach ${komma(e.dauer)} s Flug (≈ ${komma(G * e.dauer * e.dauer / 8, 1)} m hoch)`;
+  if (e.art === "stoss" && e.staerke != null) detail = `, Stärke ${komma(e.staerke, 1)}`;
+  li.innerHTML = `<span class="zeit daten">${komma(s, 1)} s</span><span class="punkt"></span><span></span>`;
+  li.querySelector(".punkt").style.background = b.farbe;
+  const text = li.lastElementChild;
+  text.append(`${b.name}: ${ARTNAMEN[e.art]}${detail}${e.live ? " (echter Ball)" : ""}`);
+  if (folge) { const f = document.createElement("span"); f.className = "folge"; f.textContent = ` → ${folge}`; text.append(f); }
+  liste.prepend(li);
+  while (liste.children.length > 9) liste.lastElementChild.remove();
+}
+function blitze(id, art) {
+  const zeile = document.querySelector(`.zeile[data-ball="${id}"][data-art="${art}"]`);
+  if (!zeile) return;
+  zeile.classList.add("feuer");
+  setTimeout(() => zeile.classList.remove("feuer"), 260);
+}
+function zeigeMesser(id, w) {
+  const karte = document.querySelector(`.ball[data-id="${id}"]`);
+  if (!karte) return;
+  karte.querySelector(".m-bewegung").style.width = `${Math.round(clamp(w.bewegung, 0, 1) * 100)}%`;
+  karte.querySelector(".m-drehung").style.width = `${Math.round(clamp(w.drehung, 0, 1) * 100)}%`;
+  const z = karte.querySelector(".zustand");
+  const text = { ruhe: "liegt", bewegt: "bewegt", flug: "fliegt", gehalten: "in der Hand", rollen: "rollt" }[w.zustand] || w.zustand;
+  if (z.textContent !== text) { z.textContent = text; z.classList.toggle("flug", w.zustand === "flug"); }
+}
+
+// ---------------------------------------------------------------------------
+// Zuordnung bearbeiten
+// ---------------------------------------------------------------------------
+function optionen(sel, eintraege, wert) {
+  sel.innerHTML = "";
+  for (const [k, v] of Array.isArray(eintraege) ? eintraege : Object.entries(eintraege)) {
+    const o = document.createElement("option"); o.value = k; o.textContent = v; if (String(k) === String(wert)) o.selected = true; sel.append(o);
+  }
+}
+const OKTAVEN = [["-2", "−2 Okt."], ["-1", "−1 Okt."], ["0", "± 0"], ["1", "+1 Okt."], ["2", "+2 Okt."]];
+
+function zeichneZuordnung() {
+  const ziel = $("#baelle");
+  ziel.innerHTML = "";
+  for (const b of zu.baelle) ziel.append(ballKarte(b));
+  optionen($("#auswahl"), Object.fromEntries(zu.baelle.map((b) => [b.id, b.name])), gewaehlt);
+  zeigeJson();
+}
+
+function ballKarte(b) {
+  const k = document.createElement("article");
+  k.className = "ball" + (b.aktiv === false ? " aus" : "");
+  k.dataset.id = b.id;
+  const p = `b${b.id}`;
+  k.innerHTML = `
+    <div class="ball-kopf">
+      <input type="color" id="${p}-farbe" value="${b.farbe}" aria-label="Farbe">
+      <label class="feldchen name"><span class="etikett">Ball ${b.id}</span><input type="text" id="${p}-name" value=""></label>
+      <label class="feldchen"><span class="etikett">Typ</span><select id="${p}-typ"></select></label>
+      <label class="feldchen"><span class="etikett">Klang</span><select id="${p}-klang"></select></label>
+      <label class="feldchen"><span class="etikett">Lage</span><select id="${p}-oktave"></select></label>
+      <label class="feldchen kanal"><span class="etikett">MIDI-Kanal</span><input type="number" min="1" max="16" id="${p}-kanal" value="${b.kanal}"></label>
+    </div>
+    <div class="messer">
+      <span>Bewegung</span><span class="balken"><i class="m-bewegung"></i></span>
+      <span>Drehung</span><span class="balken"><i class="m-drehung"></i></span>
+    </div>
+    <div class="knopfreihe">
+      <span class="zustand">liegt</span>
+      <label class="schalter"><input type="checkbox" id="${p}-aktiv" ${b.aktiv !== false ? "checked" : ""}> aktiv</label>
+      <button class="knopf klein" type="button" data-tun="vorschlag">Vorschlag für Typ übernehmen</button>
+      <button class="knopf klein" type="button" data-tun="weg">Entfernen</button>
+    </div>
+    <div class="zeilen">
+      <span class="etikett">Auslöser</span>
+    </div>
+    <div class="zeilen gruppe">
+      <span class="etikett">Fortlaufend</span>
+    </div>`;
+  k.querySelector(`#${p}-name`).value = b.name;
+  optionen(k.querySelector(`#${p}-typ`), Object.fromEntries(Object.entries(TYPEN).map(([t, v]) => [t, v.name])), b.typ);
+  optionen(k.querySelector(`#${p}-klang`), KLAENGE, b.klang);
+  optionen(k.querySelector(`#${p}-oktave`), OKTAVEN, b.oktave || 0);
+
+  const [ausl, fort] = k.querySelectorAll(".zeilen");
+  for (const [art, titel, info] of AUSLOESER) {
+    const a = b.aktionen[art] || (b.aktionen[art] = { funktion: "nichts" });
+    const z = document.createElement("div");
+    z.className = "zeile"; z.dataset.ball = b.id; z.dataset.art = art;
+    z.innerHTML = `<span class="was"><b>${titel}</b><small>${info}</small></span>
+      <select id="${p}-${art}-f" aria-label="${titel}: Funktion"></select>
+      <select id="${p}-${art}-t" aria-label="${titel}: Tonhöhe"></select>
+      <select id="${p}-${art}-o" aria-label="${titel}: Oktave"></select>`;
+    let f = art === "ruhe" ? F_RUHE : { ...F_AUSLOESER };
+    if (art !== "abflug" && art !== "ruhe") delete f.ton_halten;
+    optionen(z.querySelector(`#${p}-${art}-f`), f, a.funktion);
+    optionen(z.querySelector(`#${p}-${art}-t`), TONHOEHE, a.tonhoehe || "skala_schritt");
+    optionen(z.querySelector(`#${p}-${art}-o`), OKTAVEN, a.oktave || 0);
+    if (art === "ruhe") { z.querySelector(`#${p}-${art}-t`).hidden = true; z.querySelector(`#${p}-${art}-o`).hidden = true; }
+    ausl.append(z);
+  }
+  for (const [art, titel, info] of FORTLAUFEND) {
+    const a = b.aktionen[art] || (b.aktionen[art] = { funktion: "nichts" });
+    const z = document.createElement("div");
+    z.className = "zeile stetig"; z.dataset.ball = b.id; z.dataset.art = art;
+    z.innerHTML = `<span class="was"><b>${titel}</b><small>${info}</small></span><select id="${p}-${art}-f" aria-label="${titel}: steuert"></select>`;
+    optionen(z.querySelector("select"), F_FORTLAUFEND, a.funktion);
+    fort.append(z);
+  }
+  sperren(k, b);
+
+  k.addEventListener("input", (ev) => {
+    const id = ev.target.id;
+    if (id === `${p}-name`) { b.name = ev.target.value || TYPEN[b.typ].name; optionen($("#auswahl"), Object.fromEntries(zu.baelle.map((x) => [x.id, x.name])), gewaehlt); }
+    else if (id === `${p}-farbe`) b.farbe = ev.target.value;
+    else if (id === `${p}-kanal`) b.kanal = clamp(parseInt(ev.target.value, 10) || 1, 1, 16);
+    else return;
+    geaendert();
+  });
+  k.addEventListener("change", (ev) => {
+    const id = ev.target.id;
+    if (id === `${p}-typ`) b.typ = ev.target.value;
+    else if (id === `${p}-klang`) b.klang = ev.target.value;
+    else if (id === `${p}-oktave`) b.oktave = parseInt(ev.target.value, 10);
+    else if (id === `${p}-aktiv`) { b.aktiv = ev.target.checked; k.classList.toggle("aus", !b.aktiv); }
+    else {
+      const m = id.match(new RegExp(`^${p}-(\\w+)-([fto])$`));
+      if (!m) return;
+      const a = b.aktionen[m[1]];
+      if (m[2] === "f") a.funktion = ev.target.value;
+      if (m[2] === "t") a.tonhoehe = ev.target.value;
+      if (m[2] === "o") a.oktave = parseInt(ev.target.value, 10);
+      sperren(k, b);
+      if (FORTLAUFEND.some(([x]) => x === m[1])) grundwerte(b);
+    }
+    geaendert();
+  });
+  k.addEventListener("click", (ev) => {
+    const tun = ev.target.closest("[data-tun]")?.dataset.tun;
+    if (tun === "vorschlag") {
+      const t = TYPEN[b.typ];
+      Object.assign(b, { klang: t.klang, oktave: t.oktave, aktionen: aktionenAusTyp(b.typ) });
+      k.replaceWith(ballKarte(b)); grundwerte(b); geaendert();
+    } else if (tun === "weg") {
+      zu.baelle = zu.baelle.filter((x) => x !== b);
+      delete sim[b.id];
+      if (gewaehlt === b.id) gewaehlt = zu.baelle[0]?.id ?? null;
+      zeichneZuordnung(); geaendert();
+    }
+  });
+  return k;
+}
+
+function sperren(k, b) {
+  const p = `b${b.id}`;
+  for (const [art] of AUSLOESER) {
+    if (art === "ruhe") continue;
+    const aus = (b.aktionen[art].funktion || "nichts") === "nichts";
+    k.querySelector(`#${p}-${art}-t`).disabled = aus;
+    k.querySelector(`#${p}-${art}-o`).disabled = aus;
+  }
+}
+
+let speichernUhr = null;
+function geaendert() {
+  zeigeJson();
+  clearTimeout(speichernUhr);
+  speichernUhr = setTimeout(() => {
+    try { localStorage.setItem(SPEICHER, JSON.stringify(zu)); } catch (e) { /* egal */ }
+    if (live.an) fetch("/zuordnung", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(zu) }).catch(() => {});
+  }, 300);
+}
+function zeigeJson() {
+  const t = $("#json");
+  if (document.activeElement !== t) t.value = JSON.stringify(zu, null, 2);
+}
+function uebernimm(z, quelle) {
+  if (!z || !Array.isArray(z.baelle)) throw new Error("Es fehlt die Liste „baelle“.");
+  Object.values(gehalten).forEach((l) => l.forEach((s) => s && s.stop()));
+  for (const b of z.baelle) {
+    b.typ = TYPEN[b.typ] ? b.typ : "softball";
+    b.aktionen = { ...aktionenAusTyp(b.typ), ...(b.aktionen || {}) };
+    b.farbe = b.farbe || TYPEN[b.typ].farbe; b.klang = b.klang || TYPEN[b.typ].klang; b.name = b.name || TYPEN[b.typ].name;
+  }
+  zu = z;
+  zu.grundton = zu.grundton ?? 48; zu.skala = SKALEN[zu.skala] ? zu.skala : "moll_pentatonik";
+  for (const id of Object.keys(sim)) if (!ballVon(+id)) delete sim[id];
+  gewaehlt = zu.baelle[0]?.id ?? null;
+  $("#grundton").value = String(zu.grundton); $("#skala").value = zu.skala;
+  zeichneZuordnung();
+  zu.baelle.forEach(grundwerte);
+  if (quelle !== "server") geaendert();
+}
+
+// ---------------------------------------------------------------------------
+// Simulation: ein Raum von 8 × 6 m von oben, Höhe als Schatten
+// ---------------------------------------------------------------------------
+const sim = {};
+let gewaehlt = zu.baelle[0]?.id ?? null;
+let jetzt = 0;
+
+function simBall(b) {
+  if (sim[b.id]) return sim[b.id];
+  const i = zu.baelle.indexOf(b);
+  const s = { x: 1.6 + (i % 3) * 2.4, y: 2.2 + Math.floor(i / 3) * 1.8 + (i % 2) * 0.6, z: 0, vx: 0, vy: 0, vz: 0,
+    zustand: "ruhe", abflugT: 0, fang: null, still: 0, ruheGemeldet: true, bewegung: 0, drehung: 0,
+    winkel: 0, schuetteln: 0, hand: null, halten: 0 };
+  sim[b.id] = s;
+  return s;
+}
+
+function sende(b, art, daten = {}) {
+  const s = sim[b.id];
+  ereignis({ typ: "ereignis", ball: b.id, art, x: s ? s.x / RAUM_B : null, ...daten });
+}
+
+function abflug(b, s, vx, vy, vz, fang = null) {
+  s.vx = vx; s.vy = vy; s.vz = vz; s.zustand = "flug"; s.abflugT = jetzt; s.fang = fang; s.ruheGemeldet = false;
+  sende(b, "abflug");
+}
+function landung(b, s) {
+  const dauer = jetzt - s.abflugT;
+  sende(b, "landung", { dauer, staerke: Math.min(1, dauer) });
+}
+
+const SIM = {
+  werfen(b, s) {
+    const T = 0.85 * typVon(b).wurf + 0.25;
+    const zx = 0.8 + Math.random() * (RAUM_B - 1.6), zy = 0.8 + Math.random() * (RAUM_T - 1.6);
+    s.z = HAND; abflug(b, s, (zx - s.x) / T, (zy - s.y) / T, (G * T * T / 2 - HAND) / T);
+  },
+  hoch(b, s) { const T = 1.0 * typVon(b).wurf + 0.2; s.z = HAND; abflug(b, s, 0, 0, G * T / 2, HAND); },
+  fallen(b, s) { s.z = 1.3; abflug(b, s, 0, 0, 0); },
+  rollen(b, s) { const w = Math.random() * Math.PI * 2, v = 2.6 * typVon(b).wurf + 0.6; s.z = 0; s.zustand = "rollen"; s.vx = Math.cos(w) * v; s.vy = Math.sin(w) * v; s.ruheGemeldet = false; },
+  kick(b, s) {
+    sende(b, "stoss", { staerke: 0.9 });
+    const w = Math.random() * Math.PI * 2, v = 4.5 * typVon(b).wurf + 0.5;
+    s.z = 0; s.zustand = "rollen"; s.vx = Math.cos(w) * v; s.vy = Math.sin(w) * v; s.ruheGemeldet = false;
+  },
+  schuetteln(b, s) { s.schuetteln = 1.2; s.ruheGemeldet = false; if (s.zustand === "ruhe") s.zustand = "bewegt"; },
+};
+
+function schritt_sim(dt) {
+  for (const b of zu.baelle) {
+    const s = simBall(b), typ = typVon(b), r = typ.d / 2;
+    let rollTempo = 0;
+    if (s.zustand === "gehalten") {
+      // folgt dem Zeiger, z = Handhöhe
+    } else if (s.zustand === "flug") {
+      s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt; s.vz -= G * dt;
+      for (const [k, v, max] of [["x", "vx", RAUM_B], ["y", "vy", RAUM_T]]) {
+        if (s[k] < r || s[k] > max - r) {   // Wand im Flug: der Sensor sieht Landung + neuen Abflug
+          s[k] = clamp(s[k], r, max - r); s[v] *= -0.6;
+          landung(b, s); sende(b, "abflug"); s.abflugT = jetzt;
+        }
+      }
+      if (s.fang != null && s.vz < 0 && s.z <= s.fang) {
+        s.z = s.fang; landung(b, s); s.zustand = "gehalten"; s.halten = 0.7; s.vx = s.vy = 0;
+      } else if (s.z <= 0) {
+        s.z = 0; landung(b, s);
+        const vz = -s.vz * typ.sprung;
+        s.vx *= 0.75; s.vy *= 0.75;
+        if (vz > 1.1) { s.vz = vz; s.abflugT = jetzt; sende(b, "abflug"); }
+        else { s.vz = 0; s.zustand = "rollen"; }
+      }
+    } else if (s.zustand === "rollen" || s.zustand === "bewegt") {
+      const v = Math.hypot(s.vx, s.vy);
+      if (v > 0) {
+        const neu = Math.max(0, v - typ.reibung * dt);
+        s.vx *= neu / v; s.vy *= neu / v;
+        s.x += s.vx * dt; s.y += s.vy * dt;
+        s.winkel += (neu * dt) / r;
+        rollTempo = neu;
+        for (const [k, vk, max] of [["x", "vx", RAUM_B], ["y", "vy", RAUM_T]]) {
+          if (s[k] < r || s[k] > max - r) {
+            s[k] = clamp(s[k], r, max - r);
+            const stoss = Math.abs(s[vk]);
+            s[vk] *= -0.55;
+            if (stoss > 0.8) sende(b, "stoss", { staerke: clamp(stoss / 5, 0.2, 1) });
+          }
+        }
+      }
+      if (rollTempo < 0.03 && s.schuetteln <= 0) {
+        s.vx = s.vy = 0; s.still += dt;
+        if (s.still > 0.5 && !s.ruheGemeldet) { s.ruheGemeldet = true; s.zustand = "ruhe"; sende(b, "ruhe"); }
+      } else s.still = 0;
+    }
+    if (s.zustand === "gehalten" && s.hand == null && s.halten > 0) {
+      s.halten -= dt;
+      if (s.halten <= 0) { s.z = 0; s.zustand = "rollen"; s.still = 0; }
+    }
+
+    // fortlaufende Werte wie beim echten Sensor
+    let zielBewegung = 0;
+    if (s.zustand === "gehalten" && s.hand) zielBewegung = clamp(s.hand.tempo / 3, 0, 1);
+    if (s.zustand === "rollen") zielBewegung = clamp(rollTempo * 0.12, 0, 0.4);
+    if (s.schuetteln > 0) { s.schuetteln -= dt; zielBewegung = Math.max(zielBewegung, 0.9 + Math.random() * 0.1); }
+    if (s.zustand !== "flug") {
+      const umdrehungen = rollTempo / (Math.PI * typ.d);
+      const zielDrehung = clamp((umdrehungen * 360) / 720, 0, 1);
+      s.drehung += (zielDrehung - s.drehung) * (1 - Math.exp(-dt / 0.2));
+      s.bewegung += (zielBewegung - s.bewegung) * (1 - Math.exp(-dt / 0.15));
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Zeichnen
+// ---------------------------------------------------------------------------
+const feld = $("#feld"), stift = feld.getContext("2d");
+let farben = {}, massstab = 1, pw = 0, ph = 0;
+function leseFarben() {
+  const c = getComputedStyle(document.documentElement);
+  for (const k of ["feld", "feld-linie", "feld-schrift", "blitz"]) farben[k] = c.getPropertyValue(`--${k}`).trim();
+}
+function groesse() {
+  const r = feld.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  pw = r.width; ph = r.width * 0.75;
+  feld.width = Math.round(pw * dpr); feld.height = Math.round(ph * dpr);
+  stift.setTransform(dpr, 0, 0, dpr, 0, 0);
+  massstab = (pw - 36) / RAUM_B;
+}
+const RAND_X = 18;
+const RAND_Y = () => (ph - RAUM_T * massstab) / 2;
+const px = (x) => RAND_X + x * massstab;
+const py = (y) => RAND_Y() + y * massstab;
+function ballRadius(b) { return (7 + typVon(b).d * 46) * (pw / 640); }
+function ballOrt(b, s) {
+  const hub = s.z * massstab * 0.55;
+  return { x: px(s.x), y: py(s.y) - hub, r: ballRadius(b) * (1 + s.z * 0.18) };
+}
+
+function zeichne() {
+  stift.clearRect(0, 0, pw, ph);
+  stift.fillStyle = farben.feld; stift.fillRect(0, 0, pw, ph);
+  // Hallenlinien
+  stift.strokeStyle = farben["feld-linie"]; stift.lineWidth = Math.max(1.5, pw / 400);
+  stift.strokeRect(px(0), py(0), RAUM_B * massstab, RAUM_T * massstab);
+  stift.beginPath(); stift.moveTo(px(RAUM_B / 2), py(0)); stift.lineTo(px(RAUM_B / 2), py(RAUM_T)); stift.stroke();
+  stift.beginPath(); stift.arc(px(RAUM_B / 2), py(RAUM_T / 2), 1.0 * massstab, 0, Math.PI * 2); stift.stroke();
+  stift.fillStyle = farben["feld-schrift"]; stift.font = `500 ${Math.max(10, pw / 60)}px JetBrains Mono, monospace`;
+  stift.textBaseline = "top";
+  for (let m = 0; m <= RAUM_B; m += 2) {
+    stift.fillRect(px(m) - 0.75, py(RAUM_T) + 2, 1.5, 5);
+    stift.fillText(`${m}`, px(m) - 3, py(RAUM_T) + 9 > ph - 14 ? py(RAUM_T) - 16 : py(RAUM_T) + 9);
+  }
+  stift.textAlign = "right"; stift.fillText("8 × 6 m", px(RAUM_B) - 6, py(0) + 6); stift.textAlign = "left";
+  if (live.an) stift.fillText("Der echte Ball steht in der Mitte", px(0) + 6, py(0) + 6);
+
+  const reihen = zu.baelle.map((b) => [b, simBall(b)]).sort((a, c) => a[1].z - c[1].z);
+  for (const [b, s] of reihen) {
+    const o = ballOrt(b, s), r0 = ballRadius(b);
+    // Schatten auf dem Boden
+    stift.fillStyle = `rgba(0,0,0,${0.28 - Math.min(0.18, s.z * 0.06)})`;
+    stift.beginPath(); stift.ellipse(px(s.x), py(s.y) + r0 * 0.25, r0 * (1 + s.z * 0.25), r0 * 0.55 * (1 + s.z * 0.25), 0, 0, Math.PI * 2); stift.fill();
+    if (b.id === gewaehlt) {
+      stift.strokeStyle = farben["feld-linie"]; stift.setLineDash([4, 4]); stift.lineWidth = 1.5;
+      stift.beginPath(); stift.arc(px(s.x), py(s.y), r0 + 8, 0, Math.PI * 2); stift.stroke(); stift.setLineDash([]);
+    }
+    zeichneBall(b, s, o);
+    if (b.id === gewaehlt || s.zustand === "flug") {
+      stift.fillStyle = farben["feld-schrift"]; stift.textAlign = "center";
+      stift.fillText(b.name, o.x, o.y + o.r + 5); stift.textAlign = "left";
+    }
+  }
+}
+
+function zeichneBall(b, s, o) {
+  stift.save();
+  stift.globalAlpha = b.aktiv === false ? 0.35 : 1;
+  stift.translate(o.x, o.y); stift.rotate(s.winkel);
+  const r = o.r;
+  stift.beginPath(); stift.arc(0, 0, r, 0, Math.PI * 2); stift.fillStyle = b.farbe; stift.fill();
+  stift.save(); stift.clip();
+  stift.strokeStyle = "rgba(255,255,255,0.85)"; stift.lineWidth = Math.max(1, r * 0.12);
+  switch (b.typ) {
+    case "tennisball":
+      stift.beginPath(); stift.arc(-r * 1.1, 0, r * 0.8, -1, 1); stift.stroke();
+      stift.beginPath(); stift.arc(r * 1.1, 0, r * 0.8, Math.PI - 1, Math.PI + 1); stift.stroke(); break;
+    case "medizinball":
+      stift.strokeStyle = "rgba(0,0,0,0.35)";
+      stift.beginPath(); stift.moveTo(-r, 0); stift.lineTo(r, 0); stift.moveTo(0, -r); stift.lineTo(0, r); stift.stroke(); break;
+    case "noppenball":
+      stift.fillStyle = "rgba(255,255,255,0.45)";
+      for (let i = 0; i < 14; i++) { const w = i * 2.4, d = r * (0.25 + (i % 3) * 0.25); stift.beginPath(); stift.arc(Math.cos(w) * d, Math.sin(w) * d, r * 0.1, 0, Math.PI * 2); stift.fill(); }
+      break;
+    case "wasserball":
+      stift.fillStyle = "rgba(255,255,255,0.9)";
+      for (let i = 0; i < 6; i += 2) { stift.beginPath(); stift.moveTo(0, 0); stift.arc(0, 0, r, (i * Math.PI) / 3, ((i + 1) * Math.PI) / 3); stift.fill(); }
+      break;
+    case "basketball":
+      stift.strokeStyle = "rgba(0,0,0,0.5)";
+      stift.beginPath(); stift.moveTo(-r, 0); stift.lineTo(r, 0); stift.moveTo(0, -r); stift.lineTo(0, r); stift.stroke();
+      stift.beginPath(); stift.arc(-r * 1.3, 0, r * 0.9, -0.9, 0.9); stift.stroke(); break;
+  }
+  stift.restore();
+  const glanz = stift.createRadialGradient(-r * 0.35, -r * 0.4, r * 0.05, 0, 0, r);
+  glanz.addColorStop(0, "rgba(255,255,255,0.45)"); glanz.addColorStop(0.5, "rgba(255,255,255,0)"); glanz.addColorStop(1, "rgba(0,0,0,0.22)");
+  stift.fillStyle = glanz; stift.beginPath(); stift.arc(0, 0, r, 0, Math.PI * 2); stift.fill();
+  stift.restore();
+}
+
+// ---------------------------------------------------------------------------
+// Zeiger: greifen, tragen, werfen, fangen
+// ---------------------------------------------------------------------------
+let griff = null;
+function feldPunkt(ev) { const r = feld.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; }
+function trifft(p) {
+  const kandidaten = zu.baelle.map((b) => [b, simBall(b)]).sort((a, c) => c[1].z - a[1].z);
+  for (const [b, s] of kandidaten) { const o = ballOrt(b, s); if (Math.hypot(p.x - o.x, p.y - o.y) <= o.r + 10) return b; }
+  return null;
+}
+feld.addEventListener("pointerdown", (ev) => {
+  audioStart();
+  const p = feldPunkt(ev), b = trifft(p);
+  if (!b) return;
+  waehle(b.id);
+  const s = simBall(b);
+  if (s.zustand === "flug") landung(b, s);
+  s.zustand = "gehalten"; s.z = HAND; s.vx = s.vy = s.vz = 0; s.ruheGemeldet = false;
+  s.hand = { spur: [{ t: performance.now(), x: s.x, y: s.y }], tempo: 0 };
+  griff = { b, s, id: ev.pointerId };
+  feld.setPointerCapture(ev.pointerId); feld.classList.add("greift");
+});
+feld.addEventListener("pointermove", (ev) => {
+  if (!griff || ev.pointerId !== griff.id) return;
+  const p = feldPunkt(ev), s = griff.s, r = typVon(griff.b).d / 2;
+  s.x = clamp((p.x - RAND_X) / massstab, r, RAUM_B - r);
+  s.y = clamp((p.y + HAND * massstab * 0.55 - RAND_Y()) / massstab, r, RAUM_T - r);
+  const t = performance.now();
+  s.hand.spur.push({ t, x: s.x, y: s.y });
+  while (s.hand.spur.length > 2 && t - s.hand.spur[0].t > 110) s.hand.spur.shift();
+});
+function loslassen(ev) {
+  if (!griff || ev.pointerId !== griff.id) return;
+  const { b, s } = griff; griff = null; feld.classList.remove("greift");
+  const spur = s.hand.spur, a = spur[0], e = spur[spur.length - 1], dt = Math.max(0.016, (e.t - a.t) / 1000);
+  let vx = (e.x - a.x) / dt, vy = (e.y - a.y) / dt;
+  const tempo = Math.hypot(vx, vy);
+  s.hand = null;
+  if (performance.now() - e.t > 120) { vx = vy = 0; }
+  if (tempo > 1.2 && performance.now() - e.t <= 120) {
+    const f = typVon(b).wurf, v = Math.min(9, tempo * f), T = clamp(0.45 + v * 0.11, 0.45, 1.6) * (0.6 + 0.4 * f);
+    abflug(b, s, (vx / tempo) * v, (vy / tempo) * v, (G * T * T / 2 - HAND) / T);
+  } else {
+    s.z = 0; s.zustand = "rollen"; s.still = 0;
+    const v = Math.min(3, Math.hypot(vx, vy)); const n = Math.hypot(vx, vy) || 1;
+    s.vx = (vx / n) * v; s.vy = (vy / n) * v;
+    if (v < 0.15) { s.vx = s.vy = 0; }
+  }
+}
+feld.addEventListener("pointerup", loslassen);
+feld.addEventListener("pointercancel", loslassen);
+setInterval(() => { // Tragegeschwindigkeit für "Bewegung"
+  if (!griff) return;
+  const spur = griff.s.hand.spur, a = spur[0], e = spur[spur.length - 1];
+  griff.s.hand.tempo = performance.now() - e.t > 120 ? 0 : Math.hypot(e.x - a.x, e.y - a.y) / Math.max(0.016, (e.t - a.t) / 1000);
+}, 50);
+
+function waehle(id) { gewaehlt = id; $("#auswahl").value = String(id); }
+$("#auswahl").addEventListener("change", (ev) => { gewaehlt = parseInt(ev.target.value, 10); });
+document.querySelectorAll("[data-sim]").forEach((k) => k.addEventListener("click", () => {
+  audioStart();
+  const b = ballVon(gewaehlt); if (!b) return;
+  const s = simBall(b);
+  if (s.zustand === "flug" && k.dataset.sim !== "schuetteln") return;
+  SIM[k.dataset.sim](b, s);
+}));
+
+// ---------------------------------------------------------------------------
+// Live: Seite über ball.py geöffnet -> echte Ereignisse, Zuordnung geht an MIDI
+// ---------------------------------------------------------------------------
+const live = { an: false, quelle: null };
+async function liveVersuchen() {
+  if (!/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) return;
+  try {
+    const r = await fetch("/zuordnung", { cache: "no-store" });
+    if (!r.ok) return;
+    const z = await r.json();
+    let lokal = null; try { lokal = JSON.parse(localStorage.getItem(SPEICHER) || "null"); } catch (e) { /* egal */ }
+    live.an = true;
+    if (lokal && Array.isArray(lokal.baelle)) { uebernimm(lokal); } else uebernimm(z, "server");
+  } catch (e) { return; }
+  const q = new EventSource("/ereignisse");
+  live.quelle = q;
+  q.onopen = () => { setzeStatus("live", "Live: ball.py verbunden"); geaendert(); };
+  q.onerror = () => setzeStatus("weg", "Live: Verbindung weg");
+  q.onmessage = (m) => {
+    const d = JSON.parse(m.data), b = fuerId(d.ball);
+    if (!b) return;
+    const s = simBall(b);
+    if (!s.liveWerte) { s.x = RAUM_B / 2; s.y = RAUM_T / 2; s.vx = s.vy = 0; s.zustand = "ruhe"; }
+    if (d.typ === "werte") {
+      s.liveWerte = d;
+      fortlaufend(b.id, d);
+      return;
+    }
+    if (d.art === "abflug") { s.liveFlug = performance.now(); }
+    if (d.art === "landung") { s.liveFlug = null; }
+    ereignis({ ...d, live: true });
+  };
+}
+function setzeStatus(art, text) { const s = $("#status"); s.className = "status " + art; s.textContent = text; }
+
+// ---------------------------------------------------------------------------
+// Kopf, Ton, Datei
+// ---------------------------------------------------------------------------
+function zeigeTon() { $("#ton").textContent = !ctx ? "Ton einschalten" : tonAn ? "Ton aus" : "Ton an"; $("#ton").classList.toggle("haupt", !ctx || !tonAn); }
+$("#ton").addEventListener("click", () => {
+  if (!ctx) { audioStart(); return; }
+  tonAn = !tonAn;
+  master.gain.setTargetAtTime(tonAn ? 0.8 : 0, ctx.currentTime, 0.05);
+  if (tonAn && ctx.state === "suspended") ctx.resume();
+  zeigeTon();
+});
+for (let i = 0; i < 12; i++) {
+  const o = document.createElement("option"); o.value = String(48 + i); o.textContent = NOTENNAMEN[i]; $("#grundton").append(o);
+}
+optionen($("#skala"), SKALEN_NAMEN, zu.skala);
+$("#grundton").value = String(zu.grundton);
+$("#grundton").addEventListener("change", (ev) => { zu.grundton = parseInt(ev.target.value, 10); geaendert(); });
+$("#skala").addEventListener("change", (ev) => { zu.skala = ev.target.value; for (const k in schritt) delete schritt[k]; geaendert(); });
+optionen($("#neu-typ"), Object.fromEntries(Object.entries(TYPEN).map(([t, v]) => [t, v.name])), "noppenball");
+$("#neu").addEventListener("click", () => {
+  if (zu.baelle.length >= 8) { melde("Mehr als 8 Bälle passen nicht gut ins Feld."); return; }
+  const id = Math.max(0, ...zu.baelle.map((b) => b.id)) + 1;
+  zu.baelle.push(neuerBall(id, $("#neu-typ").value));
+  gewaehlt = id; zeichneZuordnung(); geaendert();
+});
+function melde(text) { $("#meldung").textContent = text; setTimeout(() => { if ($("#meldung").textContent === text) $("#meldung").textContent = ""; }, 3500); }
+$("#kopieren").addEventListener("click", () => {
+  const t = $("#json"); t.value = JSON.stringify(zu, null, 2);
+  navigator.clipboard.writeText(t.value).then(() => melde("Kopiert."), () => { t.select(); melde("Text ist markiert, jetzt mit Strg/Cmd + C kopieren."); });
+});
+$("#uebernehmen").addEventListener("click", () => {
+  try { uebernimm(JSON.parse($("#json").value)); melde("Übernommen."); } catch (e) { melde("Das ist kein gültiges JSON: " + e.message); }
+});
+$("#datei").addEventListener("change", (ev) => {
+  const f = ev.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { try { uebernimm(JSON.parse(r.result)); melde(`${f.name} geladen.`); } catch (e) { melde("Die Datei ist kein gültiges JSON: " + e.message); } };
+  r.readAsText(f); ev.target.value = "";
+});
+$("#zuruecksetzen").addEventListener("click", () => { uebernimm(beispiel()); melde("Beispiel mit drei Bällen wiederhergestellt."); });
+
+// ---------------------------------------------------------------------------
+// Start
+// ---------------------------------------------------------------------------
+leseFarben();
+new MutationObserver(leseFarben).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", leseFarben);
+groesse();
+new ResizeObserver(() => groesse()).observe(feld);
+zeichneZuordnung();
+zeigeTon();
+
+let letzteZeit = performance.now(), letzteWerte = 0;
+function schleife(t) {
+  const dt = Math.min(0.05, (t - letzteZeit) / 1000); letzteZeit = t; jetzt += dt;
+  schritt_sim(dt);
+  for (const b of zu.baelle) {   // echter Ball im Flug: hebt sich in der Mitte des Felds
+    const s = simBall(b);
+    if (s.liveFlug != null) { const f = (performance.now() - s.liveFlug) / 1000; s.z = Math.min(2.5, 3 * f); }
+    else if (s.liveWerte && s.zustand !== "flug" && s.zustand !== "gehalten" && !griff) { s.z = Math.max(0, s.z - dt * 4); }
+  }
+  if (t - letzteWerte > 33) {
+    letzteWerte = t;
+    for (const b of zu.baelle) {
+      const s = simBall(b);
+      if (!s.liveWerte) fortlaufend(b.id, { bewegung: s.bewegung, drehung: s.drehung, zustand: s.zustand });
+    }
+  }
+  zeichne();
+  requestAnimationFrame(schleife);
+}
+requestAnimationFrame(schleife);
+liveVersuchen();
+</script>
