@@ -1,0 +1,556 @@
+<title>Ball-Klangpaletten</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: Kopf mit Palettenwahl, darunter ein Raster aus sechs Ballkarten; Helm-Werte klappen in jeder Karte auf */
+:root {
+  --grund: #edf0ee;
+  --karte: #fbfcfb;
+  --tinte: #142019;
+  --leise: #56645c;
+  --rand: #d0d8d3;
+  --akzent: #0f6b5a;
+  --akzent-text: #ffffff;
+  --akzent-zart: #d6ebe5;
+  --spielt: #f4c430;
+  --schatten: rgba(9, 25, 20, 0.08);
+
+  --schrift-titel: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --schrift: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --schrift-daten: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --grund: #0e1513; --karte: #16201d; --tinte: #e4ebe7; --leise: #95a59d; --rand: #2b3834;
+    --akzent: #4fc2a6; --akzent-text: #06231c; --akzent-zart: #173a32; --spielt: #e8b923;
+    --schatten: rgba(0, 0, 0, 0.3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --grund: #0e1513; --karte: #16201d; --tinte: #e4ebe7; --leise: #95a59d; --rand: #2b3834;
+  --akzent: #4fc2a6; --akzent-text: #06231c; --akzent-zart: #173a32; --spielt: #e8b923;
+  --schatten: rgba(0, 0, 0, 0.3);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--grund); color: var(--tinte);
+  font: 15px/1.5 var(--schrift);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px 40px;
+}
+h1, h2, h3 { font-family: var(--schrift-titel); text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2.1rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
+h2 { font-size: 1.25rem; font-weight: 800; letter-spacing: -0.01em; }
+h3 { font-size: 1.05rem; font-weight: 600; }
+p { margin: 0; }
+.etikett { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--leise); font-weight: 700; }
+.daten { font-family: var(--schrift-daten); font-variant-numeric: tabular-nums; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
+
+.seite { max-width: 1240px; margin: 0 auto; display: grid; gap: 18px; }
+.kopf { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: end; justify-content: space-between; }
+.kopf p { color: var(--leise); max-width: 62ch; margin-top: 6px; }
+.steuer { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.feldchen { display: grid; gap: 3px; }
+.knopf {
+  border: 1px solid var(--rand); background: var(--karte); border-radius: 8px;
+  padding: 7px 12px; cursor: pointer; line-height: 1.2; min-height: 36px;
+}
+.knopf:hover { border-color: var(--akzent); }
+.knopf.haupt { background: var(--akzent); color: var(--akzent-text); border-color: transparent; font-weight: 700; }
+.knopf.klein { min-height: 32px; padding: 5px 10px; font-size: 0.88rem; }
+input[type="range"] { accent-color: var(--akzent); width: 160px; }
+
+.reiter { display: flex; flex-wrap: wrap; gap: 6px; }
+.reiter button {
+  border: 1px solid var(--rand); background: transparent; border-radius: 999px; padding: 6px 14px; cursor: pointer;
+}
+.reiter button[aria-selected="true"] { background: var(--tinte); color: var(--grund); border-color: var(--tinte); }
+
+.palette-kopf { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; justify-content: space-between;
+  border-top: 1px solid var(--rand); padding-top: 16px; }
+.palette-kopf > div { min-width: 0; flex: 1 1 320px; }
+.palette-kopf p { color: var(--leise); margin-top: 4px; }
+
+.raster { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+.ball {
+  background: var(--karte); border: 1px solid var(--rand); border-radius: 12px; padding: 14px;
+  display: grid; gap: 10px; align-content: start; min-width: 0;
+  transition: box-shadow 0.4s, border-color 0.4s;
+}
+.ball.spielt { border-color: var(--spielt); box-shadow: 0 0 0 3px color-mix(in srgb, var(--spielt) 45%, transparent); transition: none; }
+.ball-kopf { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.kugel { width: 30px; height: 30px; border-radius: 50%; box-shadow: inset -4px -5px 0 rgba(0,0,0,0.18), inset 3px 3px 0 rgba(255,255,255,0.25); }
+.ball-kopf .klang { color: var(--leise); font-size: 0.9rem; line-height: 1.3; }
+.huelle { width: 92px; height: 34px; display: block; }
+.huelle path { fill: color-mix(in srgb, var(--akzent) 18%, transparent); stroke: var(--akzent); stroke-width: 1.5; }
+.huelle line { stroke: var(--rand); stroke-width: 1; }
+.knopfreihe { display: flex; flex-wrap: wrap; gap: 6px; }
+.dreh { font-size: 0.85rem; color: var(--leise); }
+.dreh b { color: var(--tinte); font-weight: 700; }
+details.helm { border-top: 1px dashed var(--rand); padding-top: 8px; }
+details.helm summary { cursor: pointer; font-size: 0.88rem; font-weight: 700; color: var(--akzent); }
+details.helm dl { display: grid; grid-template-columns: minmax(0, 7.5em) minmax(0, 1fr); gap: 3px 10px; margin: 8px 0 0; font-size: 0.82rem; }
+details.helm dt { color: var(--leise); }
+details.helm dd { margin: 0; font-family: var(--schrift-daten); font-size: 0.78rem; overflow-wrap: anywhere; }
+
+.anleitung { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  border-top: 1px solid var(--rand); padding-top: 16px; }
+.anleitung section { display: grid; gap: 6px; align-content: start; }
+.anleitung ol, .anleitung ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+.anleitung code { font-family: var(--schrift-daten); font-size: 0.85em; background: var(--akzent-zart); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.hinweis { font-size: 0.85rem; color: var(--leise); }
+@media (prefers-reduced-motion: reduce) { .ball { transition: none; } }
+</style>
+
+<div class="seite">
+  <header class="kopf">
+    <div>
+      <h1>Ball-Klangpaletten</h1>
+      <p>Fünf Klangwelten für dieselben sechs Bälle. Jede Palette gibt es als Helm-Bank zum Importieren; hier lässt sie sich vorher anhören.</p>
+    </div>
+    <div class="steuer">
+      <label class="feldchen"><span class="etikett">Drehung (Mod-Rad)</span>
+        <input type="range" id="drehung" min="0" max="1" step="0.01" value="0"></label>
+      <button class="knopf" id="stopp" type="button">Alles stoppen</button>
+    </div>
+  </header>
+
+  <nav class="reiter" role="tablist" aria-label="Paletten" id="reiter"></nav>
+
+  <div class="palette-kopf">
+    <div>
+      <h2 id="p-name"></h2>
+      <p id="p-idee"></p>
+    </div>
+    <button class="knopf haupt" id="szene" type="button">Szene abspielen (8 s)</button>
+  </div>
+
+  <div class="raster" id="raster"></div>
+
+  <div class="anleitung">
+    <section>
+      <h3>In Helm laden</h3>
+      <ol>
+        <li>In Helm oben auf den Preset-Namen klicken, dann <b>Import Bank</b>.</li>
+        <li><code>beschleunigung/helm/Ball-Klaenge.helmbank</code> wählen.</li>
+        <li>Die Bank „Ball-Klaenge“ erscheint im Browser, darin je Palette ein Ordner.</li>
+      </ol>
+      <p class="hinweis">Alternativ die einzelnen <code>.helm</code>-Dateien nach <code>~/Library/Audio/Presets/Helm/Ball-Klaenge/</code> kopieren.</p>
+    </section>
+    <section>
+      <h3>Mit ball.py spielen</h3>
+      <ul>
+        <li>Jeder Ball sendet auf seinem eigenen MIDI-Kanal. Pro Ball eine Helm-Instanz (z. B. eine Spur in Ableton oder GarageBand) mit dem passenden Preset.</li>
+        <li>Auf der Zuordnungsseite <b>Drehung → Vibrato</b> wählen. Das schickt CC 1, in Helm das Mod-Rad, und jedes Preset hat es passend belegt.</li>
+        <li>Die Anschlagstärke kommt aus der Flugdauer: weiter geworfen klingt lauter.</li>
+      </ul>
+    </section>
+    <section>
+      <h3>Zur Vorschau</h3>
+      <p class="hinweis">Die Seite baut Helms Aufbau im Browser nach (zwei Oszillatoren, Sub, Rauschen, Filter, Hüllkurven, Verzerrung, Delay, Hall). Sie klingt ähnlich, aber nicht identisch. Entscheidend ist, wie es in Helm klingt.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+"use strict";
+const DATEN = /*DATEN*/null;
+const STD = DATEN.standard;
+const FARBEN = { "Ballon": "#2a8fd6", "Medizinball": "#6b4a34", "Haar-Ball": "#b08d57", "Softball": "#e4572e", "Noppenball": "#7b4fd6", "Tennisball": "#c8d93a" };
+const GRUNDTON = { "Ballon": 72, "Medizinball": 36, "Haar-Ball": 60, "Softball": 60, "Noppenball": 60, "Tennisball": 72 };
+const PENTA = [0, 3, 5, 7, 10];
+const WELLEN = ["Sinus", "Dreieck", "Rechteck", "Säge auf", "Säge ab", "3 Stufen", "4 Stufen", "8 Stufen", "3 Pyramide", "5 Pyramide", "9 Pyramide", "Sample & Hold", "Sample & Glide"];
+const BEREICH = {
+  cutoff: [28, 127], osc_1_transpose: [-48, 48], osc_2_transpose: [-48, 48], osc_1_tune: [-1, 1], osc_2_tune: [-1, 1],
+  noise_volume: [0, 1], osc_1_volume: [0, 1], osc_2_volume: [0, 1], sub_volume: [0, 1], cross_modulation: [0, 0.5],
+  resonance: [0, 1], distortion_drive: [-30, 30], mono_lfo_1_frequency: [-7, 6], mono_lfo_1_amplitude: [-1, 1],
+  delay_feedback: [-1, 1],
+};
+const $ = (s, el = document) => el.querySelector(s);
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const komma = (x, n = 2) => (+x.toFixed(n)).toString().replace(".", ",");
+
+let aktiv = 0;
+try { const g = parseInt(localStorage.getItem("ballklang-palette"), 10); if (g >= 0 && g < DATEN.paletten.length) aktiv = g; } catch (e) { /* egal */ }
+if (location.hash) { const i = DATEN.paletten.findIndex((p) => anker(p.name) === location.hash.slice(1)); if (i >= 0) aktiv = i; }
+function anker(name) { return name.toLowerCase().replace(/[^a-z]+/g, "-"); }
+function einstellungen(preset) { return Object.assign({}, STD, preset.settings); }
+
+// ---------------------------------------------------------------------------
+// Klangerzeugung: Helms Aufbau mit Web Audio nachgebaut
+// ---------------------------------------------------------------------------
+let ctx = null, master = null, rauschPuffer = null;
+const wellenCache = new Map(), busse = new Map(), laufend = new Set();
+
+function audio() {
+  if (ctx) { if (ctx.state === "suspended") ctx.resume(); return ctx; }
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const komp = ctx.createDynamicsCompressor(); komp.threshold.value = -12; komp.ratio.value = 4;
+  master = ctx.createGain(); master.gain.value = 0.7;
+  master.connect(komp); komp.connect(ctx.destination);
+  rauschPuffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+  const d = rauschPuffer.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  return ctx;
+}
+
+function form(welle, t) {   // eine Periode der Helm-Wellenform, t in [0,1)
+  const saege = 2 * t - 1, dreieck = 1 - 4 * Math.abs(t - 0.5);
+  switch (welle) {
+    case 5: return Math.floor(t * 3) / 1 - 1;
+    case 6: return (Math.floor(t * 4) / 3) * 2 - 1;
+    case 7: return (Math.floor(t * 8) / 7) * 2 - 1;
+    case 8: return Math.round(dreieck * 1.5) / 1.5;
+    case 9: return Math.round(dreieck * 2.5) / 2.5;
+    case 10: return Math.round(dreieck * 4.5) / 4.5;
+    default: return saege;
+  }
+}
+function welle(osz, nr) {
+  const typ = ["sine", "triangle", "square", "sawtooth", "sawtooth"][nr];
+  if (typ) { osz.type = typ; return; }
+  if (!wellenCache.has(nr)) {
+    const N = 1024, H = 64, re = new Float32Array(H), im = new Float32Array(H);
+    for (let k = 1; k < H; k++) {
+      let a = 0, b = 0;
+      for (let i = 0; i < N; i++) { const x = form(nr, i / N), w = (2 * Math.PI * k * i) / N; a += x * Math.cos(w); b += x * Math.sin(w); }
+      re[k] = (2 * a) / N; im[k] = (2 * b) / N;
+    }
+    wellenCache.set(nr, ctx.createPeriodicWave(re, im));
+  }
+  osz.setPeriodicWave(wellenCache.get(nr));
+}
+
+function verzerrKurve(typ, driveDb) {
+  const g = Math.pow(10, driveDb / 20), n = 1024, k = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = ((i / (n - 1)) * 2 - 1) * g;
+    if (typ === 1) k[i] = clamp(x, -1, 1);
+    else if (typ === 2) { const y = ((x + 1) % 4 + 4) % 4; k[i] = y < 2 ? y - 1 : 3 - y; }
+    else if (typ === 3) k[i] = Math.sin((x * Math.PI) / 2);
+    else k[i] = Math.tanh(x);
+  }
+  return k;
+}
+
+function bus(schluessel, s) {      // Delay und Hall je Preset, von allen Noten geteilt
+  if (busse.has(schluessel)) return busse.get(schluessel);
+  const ein = ctx.createGain(), aus = ctx.createGain();
+  aus.gain.value = Math.pow(s.volume, 2) * 0.9;
+  ein.connect(aus);
+  if (s.delay_on) {
+    let zeit;
+    const schlaege = s.beats_per_minute * 60;
+    if (s.delay_sync === 0) zeit = 1 / Math.pow(2, s.delay_frequency);
+    else {
+      zeit = (60 / schlaege) * 4 * Math.pow(2, 5 - s.delay_tempo);
+      if (s.delay_sync === 2) zeit *= 1.5;
+      if (s.delay_sync === 3) zeit *= 2 / 3;
+    }
+    const d = ctx.createDelay(4), rueck = ctx.createGain(), nass = ctx.createGain();
+    d.delayTime.value = clamp(zeit, 0.01, 3.9);
+    rueck.gain.value = clamp(s.delay_feedback, -0.95, 0.95);
+    nass.gain.value = s.delay_dry_wet;
+    ein.connect(d); d.connect(rueck); rueck.connect(d); d.connect(nass); nass.connect(aus);
+    busse.set(schluessel + ":rueck", rueck);
+  }
+  if (s.reverb_on) {
+    const laenge = 0.8 + ((s.reverb_feedback - 0.8) / 0.2) * 5;
+    const n = Math.floor(ctx.sampleRate * laenge), ir = ctx.createBuffer(2, n, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) { const k = ir.getChannelData(c); for (let i = 0; i < n; i++) k[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3); }
+    const hall = ctx.createConvolver(), daempf = ctx.createBiquadFilter(), nass = ctx.createGain();
+    hall.buffer = ir; daempf.type = "lowpass"; daempf.frequency.value = 500 + 15000 * Math.pow(1 - s.reverb_damping, 2);
+    nass.gain.value = s.reverb_dry_wet * 1.4;
+    ein.connect(hall); hall.connect(daempf); daempf.connect(nass); nass.connect(aus);
+  }
+  aus.connect(master);
+  const b = { ein };
+  busse.set(schluessel, b);
+  return b;
+}
+
+const SCHRITT = 0.01;   // Steuerkurven mit 100 Hz
+function huelle(t, a, d, su, r, aus) {   // ADSR, Zeiten in Sekunden; aus = Zeitpunkt Note aus
+  const wert = (x) => (x < a ? (a > 0 ? x / a : 1) : su + (1 - su) * Math.exp(-(x - a) / Math.max(0.001, d / 4)));
+  if (t < aus) return wert(t);
+  return wert(aus) * Math.exp(-(t - aus) / Math.max(0.001, r / 4));
+}
+
+// Eine Note spielen. dreh(t) = Mod-Rad 0..1 über die Zeit
+function note(preset, schluessel, midi, staerke, start, dauer, dreh, karte) {
+  audio();
+  const s = einstellungen(preset), t0 = ctx.currentTime + Math.max(0, start);
+  const sq = (v) => v * v;
+  const A = [sq(s.amp_attack), sq(s.amp_decay), s.amp_sustain, sq(s.amp_release)];
+  const F = [sq(s.fil_attack), sq(s.fil_decay), s.fil_sustain, sq(s.fil_release)];
+  const M = [sq(s.mod_attack), sq(s.mod_decay), s.mod_sustain, sq(s.mod_release)];
+  const ende = dauer + A[3] * 1.4 + 0.05, n = Math.ceil(ende / SCHRITT) + 1;
+  const zufall = Math.random();
+  const mods = s.modulations || [];
+
+  // Steuerkurven für alles, was moduliert wird
+  const ziele = new Set(["cutoff", "osc_1_transpose", "osc_2_transpose", "osc_1_tune", "osc_2_tune", "noise_volume", "osc_1_volume", "osc_2_volume", "sub_volume", "cross_modulation", "resonance"]);
+  const kurve = {}; ziele.forEach((z) => { kurve[z] = new Float32Array(n); });
+  const amp = new Float32Array(n);
+  let phase = 0, sh = Math.random() * 2 - 1, letzterZyklus = 0;
+  const vel = staerke;
+  const ampFaktor = s.velocity_track >= 0 ? 1 - s.velocity_track + s.velocity_track * vel : 1 + s.velocity_track * vel;
+  for (let i = 0; i < n; i++) {
+    const t = i * SCHRITT, rad = clamp(dreh(t), 0, 1);
+    const quellen = { mod_wheel: rad, velocity: vel, random: zufall, note: (midi - 60) / 64,
+      mod_envelope: huelle(t, M[0], M[1], M[2], M[3], dauer), fil_envelope: huelle(t, F[0], F[1], F[2], F[3], dauer),
+      amp_envelope: huelle(t, A[0], A[1], A[2], A[3], dauer) };
+    // LFO: Frequenz und Stärke können selbst moduliert sein
+    let lfoHz = s.mono_lfo_1_frequency, lfoAmp = s.mono_lfo_1_amplitude;
+    for (const m of mods) {
+      if (m.destination === "mono_lfo_1_frequency" && m.source in quellen) lfoHz += m.amount * quellen[m.source];
+      if (m.destination === "mono_lfo_1_amplitude" && m.source in quellen) lfoAmp += m.amount * quellen[m.source];
+    }
+    phase += Math.pow(2, clamp(lfoHz, -7, 6)) * SCHRITT;
+    const p = phase % 1, w = s.mono_lfo_1_waveform;
+    if (Math.floor(phase) !== letzterZyklus) { letzterZyklus = Math.floor(phase); sh = Math.random() * 2 - 1; }
+    let lfo = [Math.sin(2 * Math.PI * p), 1 - 4 * Math.abs(p - 0.5), p < 0.5 ? 1 : -1, 2 * p - 1, 1 - 2 * p][w];
+    if (lfo === undefined) lfo = sh;
+    quellen.mono_lfo_1 = lfo * clamp(lfoAmp, -1, 1);
+
+    ziele.forEach((z) => {
+      let v = s[z];
+      if (z === "cutoff") v += s.keytrack * (midi - 60) + s.fil_env_depth * quellen.fil_envelope;
+      for (const m of mods) if (m.destination === z && m.source in quellen) v += m.amount * quellen[m.source];
+      const [lo, hi] = BEREICH[z]; kurve[z][i] = clamp(v, lo, hi);
+    });
+    amp[i] = quellen.amp_envelope * ampFaktor;
+  }
+  // Mod-Rad auf Verzerrung und Delay-Rückkopplung: Wert zum Notenbeginn
+  let drive = s.distortion_drive, rueck = s.delay_feedback;
+  for (const m of mods) {
+    if (m.source === "mod_wheel" && m.destination === "distortion_drive") drive += m.amount * dreh(0);
+    if (m.source === "mod_wheel" && m.destination === "delay_feedback") rueck += m.amount * dreh(0);
+  }
+
+  const b = bus(schluessel, s);
+  const r = busse.get(schluessel + ":rueck"); if (r) r.gain.setTargetAtTime(clamp(rueck, -0.95, 0.95), t0, 0.05);
+  const stimme = ctx.createGain(); stimme.gain.value = 0;
+  const mix = ctx.createGain();
+  let kette = mix;
+  if (s.filter_on) {
+    const stufen = s.filter_style === 1 ? 2 : 1;
+    const typ = s.filter_blend < 0.5 ? "lowpass" : s.filter_blend < 1.5 ? "bandpass" : "highpass";
+    for (let k = 0; k < stufen; k++) {
+      const f = ctx.createBiquadFilter(); f.type = typ;
+      const hz = kurve.cutoff.map((c) => clamp(440 * Math.pow(2, (c - 69) / 12), 20, 18000));
+      f.frequency.setValueCurveAtTime(hz, t0, ende);
+      const q = kurve.resonance.map((x) => (typ === "bandpass" ? 0.7 + x * x * 12 : 0.5 + x * x * (stufen === 2 ? 6 : 14)));
+      f.Q.setValueCurveAtTime(q, t0, ende);
+      kette.connect(f); kette = f;
+    }
+  }
+  if (s.distortion_on) {
+    const ws = ctx.createWaveShaper(), trocken = ctx.createGain(), nass = ctx.createGain(), summe = ctx.createGain();
+    ws.curve = verzerrKurve(s.distortion_type, clamp(drive, -30, 30)); ws.oversample = "2x";
+    nass.gain.value = s.distortion_mix * 0.6; trocken.gain.value = 1 - s.distortion_mix;
+    kette.connect(ws); ws.connect(nass); nass.connect(summe); kette.connect(trocken); trocken.connect(summe);
+    kette = summe;
+  }
+  kette.connect(stimme); stimme.connect(b.ein);
+  stimme.gain.setValueCurveAtTime(amp.map((x) => x * 0.35), t0, ende);
+
+  const knoten = [], freq = 440 * Math.pow(2, (midi - 69) / 12);
+  const oszi = (nr) => {
+    const p = `osc_${nr}_`, stimmen = Math.min(5, s[p + "unison_voices"]), g = ctx.createGain(), eigene = [];
+    g.gain.setValueCurveAtTime(kurve[p + "volume"].map((v) => (v * v) / Math.sqrt(stimmen)), t0, ende);
+    for (let u = 0; u < stimmen; u++) {
+      const o = ctx.createOscillator(); welle(o, s[p + "waveform"]); o.frequency.value = freq;
+      const streu = stimmen > 1 ? (u / (stimmen - 1) - 0.5) * 2 * s[p + "unison_detune"] : 0;
+      o.detune.setValueCurveAtTime(kurve[p + "transpose"].map((tr, i) => tr * 100 + kurve[p + "tune"][i] * 100 + streu), t0, ende);
+      o.connect(g); eigene.push(o); knoten.push(o);
+    }
+    g.connect(mix);
+    return eigene;
+  };
+  const o1 = oszi(1), o2 = oszi(2);
+  if (s.cross_modulation > 0 || mods.some((m) => m.destination === "cross_modulation")) {
+    for (const [von, nach] of [[o2[0], o1], [o1[0], o2]]) {
+      const tiefe = ctx.createGain();
+      tiefe.gain.setValueCurveAtTime(kurve.cross_modulation.map((c) => c * freq * 4), t0, ende);
+      von.connect(tiefe); nach.forEach((o) => tiefe.connect(o.frequency));
+    }
+  }
+  if (s.sub_volume > 0) {
+    const o = ctx.createOscillator(), g = ctx.createGain(); welle(o, s.sub_waveform);
+    o.frequency.value = freq / (s.sub_octave ? 4 : 2);
+    o.detune.setValueCurveAtTime(kurve.osc_1_transpose.map((tr) => tr * 100), t0, ende);
+    g.gain.setValueCurveAtTime(kurve.sub_volume.map((v) => v * v), t0, ende);
+    o.connect(g); g.connect(mix); knoten.push(o);
+  }
+  if (s.noise_volume > 0 || mods.some((m) => m.destination === "noise_volume")) {
+    const q = ctx.createBufferSource(), g = ctx.createGain(); q.buffer = rauschPuffer; q.loop = true;
+    q.loopStart = Math.random(); g.gain.setValueCurveAtTime(kurve.noise_volume.map((v) => v * v * 0.8), t0, ende);
+    q.connect(g); g.connect(mix); knoten.push(q);
+  }
+  const eintrag = { quellen: knoten, stimme };
+  laufend.add(eintrag);
+  knoten.forEach((q) => { q.start(t0); q.stop(t0 + ende); });
+  knoten[0].onended = () => { laufend.delete(eintrag); stimme.disconnect(); };
+  if (karte) {
+    setTimeout(() => karte.classList.add("spielt"), Math.max(0, start * 1000));
+    setTimeout(() => karte.classList.remove("spielt"), Math.max(0, (start + Math.min(dauer, 0.6)) * 1000 + 120));
+  }
+}
+
+function allesStopp() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  laufend.forEach((e) => { e.stimme.gain.cancelScheduledValues(t); e.stimme.gain.setTargetAtTime(0, t, 0.03); e.quellen.forEach((q) => { try { q.stop(t + 0.2); } catch (x) { /* schon aus */ } }); });
+  laufend.clear();
+  busse.forEach((b) => { if (b.ein) b.ein.disconnect(); });
+  busse.clear();
+  document.querySelectorAll(".ball.spielt").forEach((k) => k.classList.remove("spielt"));
+}
+
+// ---------------------------------------------------------------------------
+// Vorführungen
+// ---------------------------------------------------------------------------
+const drehWert = () => parseFloat($("#drehung").value);
+const schluessel = (pi, preset) => `${pi}:${preset.name}`;
+function ton(preset, stufe) {
+  const g = GRUNDTON[preset.name], o = Math.floor(stufe / 5), r = ((stufe % 5) + 5) % 5;
+  return g + 12 * o + PENTA[r];
+}
+const VORF = {
+  anschlag(pi, preset, karte) { const d = drehWert(); note(preset, schluessel(pi, preset), ton(preset, 0), 0.85, 0, 0.6, () => d, karte); },
+  aufspringen(pi, preset, karte) {
+    const d = drehWert(); let t = 0;
+    [[0.0, 1.0, 4], [0.46, 0.8, 3], [0.3, 0.62, 2], [0.19, 0.46, 1], [0.12, 0.32, 0]].forEach(([abstand, st, stufe]) => {
+      t += abstand; note(preset, schluessel(pi, preset), ton(preset, stufe), st, t, 0.12, () => d, karte);
+    });
+  },
+  drehen(pi, preset, karte) {
+    note(preset, schluessel(pi, preset), ton(preset, 2), 0.7, 0, 2.6, (t) => Math.sin(Math.PI * clamp(t / 2.6, 0, 1)), karte);
+  },
+};
+
+function szene() {
+  allesStopp(); audio();
+  const pi = aktiv, pal = DATEN.paletten[pi], d = drehWert();
+  const P = Object.fromEntries(pal.presets.map((p) => [p.name, p]));
+  const karte = (name) => document.querySelector(`.ball[data-name="${name}"]`);
+  const s = 60 / 100;   // 100 Schläge pro Minute
+  const spiel = (name, stufe, st, takt, dauer) =>
+    note(P[name], schluessel(pi, P[name]), ton(P[name], stufe), st, takt * s, dauer, () => d, karte(name));
+  // Medizinball auf 1 und 3, Softball spielt eine Melodie, Tennisball springt, Ballon schwebt drüber
+  for (let t = 0; t < 12; t += 2) spiel("Medizinball", t % 8 === 6 ? 3 : 0, 0.9, t, 0.3);
+  [0, 2, 3, 4, 2, 1, 0, 2].forEach((st, i) => spiel("Softball", st, 0.7, 0.5 + i * 1.5, 0.3));
+  spiel("Ballon", 4, 0.6, 0, 3 * s); spiel("Ballon", 3, 0.6, 6, 3 * s);
+  let t = 4; [[0, 1, 5], [0.75, 0.8, 4], [0.5, 0.6, 3], [0.33, 0.45, 2], [0.22, 0.3, 2]].forEach(([a, st, stufe]) => { t += a; spiel("Tennisball", stufe, st, t, 0.1); });
+  for (let k = 0; k < 6; k++) spiel("Haar-Ball", 2, 0.55, 1 + k * 2 + (k % 2) * 0.5, 0.35);
+  spiel("Noppenball", 1, 0.8, 8.5, 0.8); spiel("Noppenball", 0, 0.7, 10.5, 0.5);
+}
+
+// ---------------------------------------------------------------------------
+// Anzeige
+// ---------------------------------------------------------------------------
+function huellenBild(s) {
+  const sq = (v) => v * v, a = sq(s.amp_attack), d = sq(s.amp_decay), su = s.amp_sustain, r = sq(s.amp_release);
+  const halten = 0.6, gesamt = 6, sx = (t) => 2 + (Math.min(t, gesamt) / gesamt) * 88, sy = (v) => 31 - v * 28;
+  const punkte = [];
+  for (let i = 0; i <= 60; i++) { const t = (i / 60) * gesamt; punkte.push([sx(t), sy(huelle(t, a, d, su, r, halten + a))]); }
+  return `<svg class="huelle" viewBox="0 0 92 34" role="img" aria-label="Lautstärkeverlauf über 6 Sekunden"><line x1="2" y1="31" x2="90" y2="31"/><path d="M2 31 ${punkte.map(([x, y]) => `L${x.toFixed(1)} ${y.toFixed(1)}`).join(" ")} L90 31 Z"/></svg>`;
+}
+
+const NAMEN = {
+  mod_wheel: "Mod-Rad", mod_envelope: "Mod-Hüllkurve", mono_lfo_1: "LFO 1", random: "Zufall", velocity: "Anschlag",
+  cutoff: "Cutoff", noise_volume: "Rauschen", osc_1_transpose: "Osc 1 Transpose", osc_2_tune: "Osc 2 Tune",
+  osc_1_tune: "Osc 1 Tune", cross_modulation: "Cross Mod", distortion_drive: "Verzerrung Drive", resonance: "Resonanz",
+  mono_lfo_1_frequency: "LFO 1 Frequenz", mono_lfo_1_amplitude: "LFO 1 Stärke", delay_feedback: "Delay Feedback",
+};
+function pct(v) { return `${Math.round(v * 100)} %`; }
+function sekunden(v) { const x = v * v; return x < 0.1 ? `${komma(x, 3)} s` : `${komma(x, 2)} s`; }
+function helmWerte(s) {
+  const z = [];
+  const osz = (nr) => {
+    const p = `osc_${nr}_`, pg = s[p + "volume"] ** 2;
+    if (pg < 0.001) return null;
+    let t = `${WELLEN[s[p + "waveform"]]}, Pegel ${pct(pg)}`;
+    if (s[p + "transpose"]) t += `, ${s[p + "transpose"] > 0 ? "+" : ""}${s[p + "transpose"]} Halbtöne`;
+    if (s[p + "tune"]) t += `, Tune ${s[p + "tune"] > 0 ? "+" : ""}${Math.round(s[p + "tune"] * 100)} Cent`;
+    if (s[p + "unison_voices"] > 1) t += `, Unison ${s[p + "unison_voices"]} × ${Math.round(s[p + "unison_detune"])} Cent`;
+    return t;
+  };
+  z.push(["Osc 1", osz(1) || "aus"]);
+  z.push(["Osc 2", osz(2) || "aus"]);
+  if (s.sub_volume > 0) z.push(["Sub", `${WELLEN[s.sub_waveform]}, Pegel ${pct(s.sub_volume ** 2)}${s.sub_octave ? ", Oktave tiefer an" : ""}`]);
+  if (s.noise_volume > 0) z.push(["Rauschen", pct(s.noise_volume ** 2)]);
+  if (s.cross_modulation > 0) z.push(["Cross Mod", `${Math.round(s.cross_modulation * 200)} %`]);
+  if (s.filter_on) {
+    const art = s.filter_blend < 0.5 ? "Tiefpass" : s.filter_blend < 1.5 ? (s.filter_blend === 1 ? "Bandpass" : `Blend ${komma(s.filter_blend, 1)}`) : "Hochpass";
+    z.push(["Filter", `${art} ${s.filter_style === 1 ? "24" : "12"} dB, Cutoff ${s.cutoff}, Resonanz ${pct(s.resonance)}${s.keytrack ? `, Keytrack ${pct(s.keytrack)}` : ""}`]);
+    if (s.fil_env_depth) z.push(["Filterhüllk.", `Tiefe ${s.fil_env_depth > 0 ? "+" : ""}${s.fil_env_depth}, A ${sekunden(s.fil_attack)}, D ${sekunden(s.fil_decay)}, S ${komma(s.fil_sustain)}, R ${sekunden(s.fil_release)}`]);
+  } else z.push(["Filter", "aus"]);
+  z.push(["Amp-Hüllk.", `A ${sekunden(s.amp_attack)}, D ${sekunden(s.amp_decay)}, S ${komma(s.amp_sustain)}, R ${sekunden(s.amp_release)}`]);
+  if ((s.modulations || []).some((m) => m.source === "mod_envelope")) z.push(["Mod-Hüllk.", `A ${sekunden(s.mod_attack)}, D ${sekunden(s.mod_decay)}, S ${komma(s.mod_sustain)}, R ${sekunden(s.mod_release)}`]);
+  if ((s.modulations || []).some((m) => m.source === "mono_lfo_1")) z.push(["LFO 1", `${WELLEN[s.mono_lfo_1_waveform]}, ${komma(Math.pow(2, s.mono_lfo_1_frequency), 2)} Hz (Sync: Seconds), Stärke ${komma(s.mono_lfo_1_amplitude)}`]);
+  if (s.distortion_on) z.push(["Verzerrung", `${["Soft Clip", "Hard Clip", "Linear Fold", "Sine Fold"][s.distortion_type]}, Drive ${s.distortion_drive > 0 ? "+" : ""}${s.distortion_drive} dB, Mix ${pct(s.distortion_mix)}`]);
+  if (s.delay_on) z.push(["Delay", `${["", "", "", "", "", "", "", "1/4", "1/8", "1/16"][s.delay_tempo]}${s.delay_sync === 2 ? " punktiert" : s.delay_sync === 3 ? " Triole" : ""}, Mix ${pct(s.delay_dry_wet)}, Feedback ${pct(s.delay_feedback)}`]);
+  if (s.reverb_on) z.push(["Hall", `Mix ${pct(s.reverb_dry_wet)}, Feedback ${pct(s.reverb_feedback)}, Dämpfung ${pct(s.reverb_damping)}`]);
+  z.push(["Anschlag", `Velocity Track ${pct(s.velocity_track)}, Stimmen ${s.polyphony}`]);
+  for (const m of s.modulations || []) z.push(["Modulation", `${NAMEN[m.source] || m.source} → ${NAMEN[m.destination] || m.destination} ${m.amount > 0 ? "+" : ""}${komma(m.amount, 2)}`]);
+  return z;
+}
+
+function zeichneReiter() {
+  const nav = $("#reiter"); nav.innerHTML = "";
+  DATEN.paletten.forEach((p, i) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.setAttribute("role", "tab"); b.id = `reiter-${i}`; b.textContent = p.name;
+    b.setAttribute("aria-selected", i === aktiv ? "true" : "false");
+    b.addEventListener("click", () => { aktiv = i; try { localStorage.setItem("ballklang-palette", String(i)); } catch (e) { /* egal */ } zeichne(); });
+    nav.append(b);
+  });
+}
+
+function zeichne() {
+  zeichneReiter();
+  const pal = DATEN.paletten[aktiv];
+  $("#p-name").textContent = pal.name;
+  $("#p-idee").textContent = pal.idee;
+  const raster = $("#raster"); raster.innerHTML = "";
+  for (const preset of pal.presets) {
+    const s = einstellungen(preset), k = document.createElement("article");
+    k.className = "ball"; k.dataset.name = preset.name;
+    k.innerHTML = `
+      <div class="ball-kopf">
+        <span class="kugel" aria-hidden="true"></span>
+        <div><h3></h3><p class="klang"></p></div>
+        ${huellenBild(s)}
+      </div>
+      <div class="knopfreihe">
+        <button class="knopf klein" type="button" data-v="anschlag">Anschlag</button>
+        <button class="knopf klein" type="button" data-v="aufspringen">Aufspringen</button>
+        <button class="knopf klein" type="button" data-v="drehen">Drehen</button>
+      </div>
+      <p class="dreh">Drehung: <b></b></p>
+      <details class="helm"><summary>Helm-Einstellungen</summary><dl></dl></details>`;
+    k.querySelector(".kugel").style.background = FARBEN[preset.name];
+    k.querySelector("h3").textContent = preset.name;
+    k.querySelector(".klang").textContent = preset.beschreibung;
+    k.querySelector(".dreh b").textContent = preset.drehung;
+    const dl = k.querySelector("dl");
+    for (const [dt, dd] of helmWerte(s)) { const a = document.createElement("dt"), b = document.createElement("dd"); a.textContent = dt; b.textContent = dd; dl.append(a, b); }
+    k.querySelectorAll("[data-v]").forEach((b) => b.addEventListener("click", () => VORF[b.dataset.v](aktiv, preset, k)));
+    raster.append(k);
+  }
+}
+
+$("#szene").addEventListener("click", szene);
+$("#stopp").addEventListener("click", allesStopp);
+zeichne();
+</script>

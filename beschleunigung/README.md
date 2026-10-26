@@ -62,3 +62,14 @@ Mit `EIGENES_WLAN = true` macht jeder ESP ein eigenes WLAN auf, der Rechner kann
 - **Sensor in die Mitte setzen.** Sitzt er außen, misst er beim Drehen die Fliehkraft. Bei 3 cm Abstand und 2 Umdrehungen pro Sekunde sind das schon 0,5 g, und der Flug wird nicht mehr erkannt.
 
 Besser wäre ein IMU mit Gyroskop und großem Messbereich, z. B. MPU-6050 (±16 g, ±2000 °/s), BMI270 oder LSM6DSO. Für harte Aufpralle gibt es Sensoren bis ±200 g (ADXL375).
+
+## Klangpaletten für Helm
+
+In `helm/` liegen fünf Klangpaletten (Material, Glocken und Holz, Arcade, Wolken, Trommelkreis) mit je einem Preset pro Ball (Ballon, Medizinball, Haar-Ball, Softball, Noppenball, Tennisball).
+
+- `helm/Ball-Klaenge.helmbank`: in Helm oben auf den Preset-Namen klicken, **Import Bank**, Datei wählen.
+- `helm/Ball-Klaenge/<Palette>/<Ball>.helm`: einzelne Presets, alternativ nach `~/Library/Audio/Presets/Helm/Ball-Klaenge/` kopieren.
+- `helm/paletten.html`: Hörseite im Browser, zeigt pro Ball auch die Helm-Werte.
+- `helm/klangpaletten.py`: erzeugt alles neu. Presets dort ändern, nicht in den `.helm`-Dateien.
+
+Drehung des Balls → in der Zuordnung „Vibrato“ wählen. Das sendet CC 1 (Mod-Rad), und jedes Preset hat das Mod-Rad passend belegt. Pro Ball eine Helm-Instanz auf dem MIDI-Kanal des Balls.
