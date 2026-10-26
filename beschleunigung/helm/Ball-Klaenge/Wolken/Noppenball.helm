@@ -5,10 +5,10 @@
   "folder_name": "Wolken",
   "author": "Ball-Installation",
   "settings": {
-    "amp_attack": 0.6324555320336759,
-    "amp_decay": 1.4142135623730951,
-    "amp_release": 1.4142135623730951,
-    "amp_sustain": 0.6,
+    "amp_attack": 0.2,
+    "amp_decay": 1.224744871391589,
+    "amp_release": 0.8944271909999159,
+    "amp_sustain": 0.5,
     "arp_frequency": 2.0,
     "arp_gate": 0.5,
     "arp_octaves": 1,
@@ -18,7 +18,7 @@
     "arp_tempo": 9,
     "beats_per_minute": 1.6666666666666667,
     "cross_modulation": 0.0,
-    "cutoff": 66,
+    "cutoff": 68,
     "delay_dry_wet": 0.5,
     "delay_feedback": 0.4,
     "delay_frequency": 2.0,
@@ -49,11 +49,11 @@
     "mod_release": 1.5,
     "mod_sustain": 0.5,
     "mono_lfo_1_amplitude": 1.0,
-    "mono_lfo_1_frequency": 2.807354922057604,
+    "mono_lfo_1_frequency": 1.0,
     "mono_lfo_1_retrigger": 1,
-    "mono_lfo_1_sync": 0,
+    "mono_lfo_1_sync": 1,
     "mono_lfo_1_tempo": 6,
-    "mono_lfo_1_waveform": 11,
+    "mono_lfo_1_waveform": 0,
     "mono_lfo_2_amplitude": 1.0,
     "mono_lfo_2_frequency": 1.0,
     "mono_lfo_2_retrigger": 2,
@@ -64,8 +64,8 @@
     "num_steps": 8,
     "osc_1_transpose": 0,
     "osc_1_tune": 0.0,
-    "osc_1_unison_detune": 35,
-    "osc_1_unison_voices": 5,
+    "osc_1_unison_detune": 8,
+    "osc_1_unison_voices": 3,
     "osc_1_volume": 0.6,
     "osc_1_waveform": 2,
     "osc_2_transpose": 0,
@@ -86,10 +86,10 @@
     "polyphony": 8,
     "portamento": -7.0,
     "portamento_type": 0,
-    "resonance": 0.5,
+    "resonance": 0.35,
     "reverb_damping": 0.4,
-    "reverb_dry_wet": 0.45,
-    "reverb_feedback": 0.95,
+    "reverb_dry_wet": 0.25,
+    "reverb_feedback": 0.9,
     "reverb_on": 1,
     "step_frequency": 2.0,
     "step_sequencer_retrigger": 2,
@@ -110,7 +110,7 @@
     "sub_waveform": 2,
     "unison_1_harmonize": 0,
     "unison_2_harmonize": 0,
-    "velocity_track": 0.3,
+    "velocity_track": 0.4,
     "volume": 0.8944271909999159,
     "step_seq_00": 0.0,
     "step_seq_01": 0.0,
@@ -146,14 +146,14 @@
     "step_seq_31": 0.0,
     "modulations": [
       {
-        "source": "mono_lfo_1",
-        "destination": "cutoff",
-        "amount": 14
+        "source": "mod_wheel",
+        "destination": "distortion_drive",
+        "amount": 10
       },
       {
         "source": "mod_wheel",
-        "destination": "mono_lfo_1_frequency",
-        "amount": 2
+        "destination": "cutoff",
+        "amount": 12
       }
     ]
   }

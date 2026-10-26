@@ -6,8 +6,8 @@
   "author": "Ball-Installation",
   "settings": {
     "amp_attack": 0.03162277660168379,
-    "amp_decay": 0.6708203932499369,
-    "amp_release": 0.4472135954999579,
+    "amp_decay": 0.5916079783099616,
+    "amp_release": 0.34641016151377546,
     "amp_sustain": 0.0,
     "arp_frequency": 2.0,
     "arp_gate": 0.5,
@@ -45,8 +45,8 @@
     "keytrack": 0.0,
     "legato": 0,
     "mod_attack": 0.0,
-    "mod_decay": 0.3,
-    "mod_release": 0.22360679774997896,
+    "mod_decay": 0.22360679774997896,
+    "mod_release": 0.17320508075688773,
     "mod_sustain": 0.0,
     "mono_lfo_1_amplitude": 1.0,
     "mono_lfo_1_frequency": 1.0,
@@ -148,7 +148,7 @@
       {
         "source": "mod_envelope",
         "destination": "osc_1_transpose",
-        "amount": 30
+        "amount": 24
       },
       {
         "source": "mod_wheel",

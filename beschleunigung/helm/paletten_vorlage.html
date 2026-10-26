@@ -265,10 +265,10 @@ function bus(schluessel, s) {      // Delay und Hall je Preset, von allen Noten 
   if (s.reverb_on) {
     const laenge = 0.8 + ((s.reverb_feedback - 0.8) / 0.2) * 5;
     const n = Math.floor(ctx.sampleRate * laenge), ir = ctx.createBuffer(2, n, ctx.sampleRate);
-    for (let c = 0; c < 2; c++) { const k = ir.getChannelData(c); for (let i = 0; i < n; i++) k[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 3); }
+    for (let c = 0; c < 2; c++) { const k = ir.getChannelData(c); for (let i = 0; i < n; i++) k[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 4); }
     const hall = ctx.createConvolver(), daempf = ctx.createBiquadFilter(), nass = ctx.createGain();
     hall.buffer = ir; daempf.type = "lowpass"; daempf.frequency.value = 500 + 15000 * Math.pow(1 - s.reverb_damping, 2);
-    nass.gain.value = s.reverb_dry_wet * 1.4;
+    nass.gain.value = s.reverb_dry_wet;
     ein.connect(hall); hall.connect(daempf); daempf.connect(nass); nass.connect(aus);
   }
   aus.connect(master);
@@ -380,7 +380,7 @@ function note(preset, schluessel, midi, staerke, start, dauer, dreh, karte) {
   if (s.cross_modulation > 0 || mods.some((m) => m.destination === "cross_modulation")) {
     for (const [von, nach] of [[o2[0], o1], [o1[0], o2]]) {
       const tiefe = ctx.createGain();
-      tiefe.gain.setValueCurveAtTime(kurve.cross_modulation.map((c) => c * freq * 4), t0, ende);
+      tiefe.gain.setValueCurveAtTime(kurve.cross_modulation.map((c) => c * freq * 2), t0, ende);
       von.connect(tiefe); nach.forEach((o) => tiefe.connect(o.frequency));
     }
   }

@@ -5,10 +5,10 @@
   "folder_name": "Arcade",
   "author": "Ball-Installation",
   "settings": {
-    "amp_attack": 0.07071067811865475,
-    "amp_decay": 0.6324555320336759,
-    "amp_release": 0.5477225575051661,
-    "amp_sustain": 0.3,
+    "amp_attack": 0.044721359549995794,
+    "amp_decay": 0.3872983346207417,
+    "amp_release": 0.282842712474619,
+    "amp_sustain": 0.0,
     "arp_frequency": 2.0,
     "arp_gate": 0.5,
     "arp_octaves": 1,
@@ -49,18 +49,18 @@
     "mod_release": 1.5,
     "mod_sustain": 0.5,
     "mono_lfo_1_amplitude": 1.0,
-    "mono_lfo_1_frequency": 4.169925001442312,
+    "mono_lfo_1_frequency": 1.0,
     "mono_lfo_1_retrigger": 1,
-    "mono_lfo_1_sync": 0,
+    "mono_lfo_1_sync": 1,
     "mono_lfo_1_tempo": 6,
-    "mono_lfo_1_waveform": 11,
+    "mono_lfo_1_waveform": 0,
     "mono_lfo_2_amplitude": 1.0,
     "mono_lfo_2_frequency": 1.0,
     "mono_lfo_2_retrigger": 2,
     "mono_lfo_2_sync": 1,
     "mono_lfo_2_tempo": 7,
     "mono_lfo_2_waveform": 0,
-    "noise_volume": 0.7071067811865476,
+    "noise_volume": 0.7745966692414834,
     "num_steps": 8,
     "osc_1_transpose": 0,
     "osc_1_tune": 0.0,
@@ -83,10 +83,10 @@
     "poly_lfo_sync": 1,
     "poly_lfo_tempo": 7,
     "poly_lfo_waveform": 0,
-    "polyphony": 8,
+    "polyphony": 12,
     "portamento": -7.0,
     "portamento_type": 0,
-    "resonance": 0.2,
+    "resonance": 0.15,
     "reverb_damping": 0.5,
     "reverb_dry_wet": 0.5,
     "reverb_feedback": 0.9,
@@ -146,14 +146,9 @@
     "step_seq_31": 0.0,
     "modulations": [
       {
-        "source": "mono_lfo_1",
-        "destination": "osc_1_transpose",
-        "amount": 24
-      },
-      {
         "source": "mod_wheel",
-        "destination": "mono_lfo_1_frequency",
-        "amount": 2
+        "destination": "cutoff",
+        "amount": 30
       }
     ]
   }
