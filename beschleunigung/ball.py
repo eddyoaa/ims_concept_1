@@ -207,13 +207,13 @@ SKALEN = {
 }
 
 # fortlaufende Werte -> MIDI-Steuerung
-STEUERUNG = {"filter": 74, "lautstaerke": 7, "hall": 91, "vibrato": 1, "verzerrung": 77}
+STEUERUNG = {"filter": 74, "lautstaerke": 7, "hall": 91, "vibrato": 1, "verzerrung": 77, "panorama": 10}
 
 STANDARD = {
     "grundton": 48,
     "skala": "moll_pentatonik",
     "baelle": [
-        {"id": 1, "name": "Softball", "typ": "softball", "farbe": "#e4572e", "klang": "pad",
+        {"id": 1, "name": "Softball", "typ": "softball", "farbe": "#e4572e", "klang": "Softball",
          "kanal": 1, "oktave": 0, "aktiv": True,
          "aktionen": {
              "abflug": {"funktion": "ton_halten", "tonhoehe": "skala_schritt", "oktave": 0},

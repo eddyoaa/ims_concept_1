@@ -141,6 +141,11 @@ input[type="color"] { width: 36px; height: 34px; border: 1px solid var(--rand); 
   .zeile.stetig .was { grid-column: auto; }
 }
 
+.raum { background: var(--karte); border: 1px solid var(--rand); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; }
+.raum-zeile { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+.raum-werte { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.85rem; color: var(--leise); }
+.raum-werte b { color: var(--tinte); font-weight: 700; }
+.ort { font-size: 0.78rem; color: var(--leise); }
 .planung { border: 1px dashed var(--rand); border-radius: 10px; padding: 10px 12px; font-size: 0.88rem; color: var(--leise); }
 .planung b { color: var(--tinte); }
 details.json { background: var(--karte); border: 1px solid var(--rand); border-radius: 10px; padding: 10px 12px; }
@@ -154,12 +159,13 @@ details.json textarea { width: 100%; min-height: 220px; margin-top: 10px; font: 
 <header class="kopf">
   <div>
     <h1>Ball-Klangzuordnung</h1>
-    <p>Welcher Ball klingt wie, und was passiert beim Werfen, Fangen, Rollen? Im Feld ausprobieren, rechts zuordnen.</p>
+    <p>Welcher Ball klingt wie, und was passiert beim Werfen, Fangen, Rollen und je nachdem, wo er ist? Im Feld ausprobieren, rechts zuordnen.</p>
   </div>
   <div class="steuer">
     <span class="status" id="status">Simulation</span>
     <label class="feldchen"><span class="etikett">Grundton</span><select id="grundton"></select></label>
     <label class="feldchen"><span class="etikett">Tonleiter</span><select id="skala"></select></label>
+    <label class="feldchen"><span class="etikett">Klangpalette</span><select id="palette"></select></label>
     <button class="knopf haupt" id="ton" type="button">Ton einschalten</button>
   </div>
 </header>
@@ -167,15 +173,31 @@ details.json textarea { width: 100%; min-height: 220px; margin-top: 10px; font: 
 <main class="raster">
   <section class="spiel" aria-label="Spielfeld">
     <div class="feldrahmen"><canvas id="feld" aria-label="Spielfeld von oben. Bälle ziehen und loslassen zum Werfen oder Rollen."></canvas></div>
-    <p class="hinweis">Ball ziehen und schnell loslassen = werfen, langsam = rollen. Fliegenden Ball antippen = fangen.</p>
+    <p class="hinweis">Ball ziehen und schnell loslassen = werfen, langsam = rollen. Fliegenden Ball antippen = fangen. Doppelklick auf eine freie Stelle setzt dort einen neuen Ball hin.</p>
     <div class="aktionen">
       <label class="feldchen"><span class="etikett">Ball</span><select id="auswahl"></select></label>
+      <label class="feldchen"><span class="etikett">Neuer Ball</span><select id="feld-typ" aria-label="Balltyp für neuen Ball"></select></label>
+      <button class="knopf klein haupt" type="button" id="feld-neu">+ Ball</button>
       <button class="knopf klein" type="button" data-sim="werfen">Werfen</button>
       <button class="knopf klein" type="button" data-sim="hoch">Hochwerfen und fangen</button>
       <button class="knopf klein" type="button" data-sim="fallen">Fallen lassen</button>
       <button class="knopf klein" type="button" data-sim="rollen">Rollen</button>
       <button class="knopf klein" type="button" data-sim="kick">Kick</button>
       <button class="knopf klein" type="button" data-sim="schuetteln">Schütteln</button>
+    </div>
+    <div class="raum" aria-label="Tracking im Raum">
+      <span class="etikett">Tracking im Raum</span>
+      <div class="raum-zeile">
+        <label class="feldchen"><span class="etikett">Bodenzonen</span><select id="raum-zonen"></select></label>
+        <label class="feldchen"><span class="etikett">Abstand der Bälle</span><select id="raum-abstand"></select></label>
+        <label class="schalter"><input type="checkbox" id="raum-linien" checked> Abstände und Schwerpunkt zeigen</label>
+      </div>
+      <div class="raum-werte" aria-live="off">
+        <span>Bälle: <b id="rw-anzahl" class="daten">0</b></span>
+        <span>Schwerpunkt: <b id="rw-schwer" class="daten">–</b></span>
+        <span>Ausbreitung: <b id="rw-ausbreitung" class="daten">–</b></span>
+        <span>Harmonie: <b id="rw-harmonie">–</b></span>
+      </div>
     </div>
     <div class="protokoll" aria-live="polite">
       <span class="etikett">Was passiert ist</span>
@@ -194,8 +216,8 @@ details.json textarea { width: 100%; min-height: 220px; margin-top: 10px; font: 
     </div>
     <div id="baelle" class="zuordnung"></div>
     <div class="planung">
-      <b>Noch ohne Sensor:</b> Pass zwischen zwei Personen, Abstand der Personen, Landezone im Raum.
-      „Nach Landeplatz“ funktioniert deshalb nur hier in der Simulation (links tief, rechts hoch). Der echte Ball nimmt stattdessen den nächsten Skalenton.
+      <b>Position gibt es nur in der Simulation.</b> Der echte Ball hat noch kein Positionstracking (dafür fehlen Kamera oder UWB) und steht deshalb in der Mitte.
+      Position, Bodenzonen, Abstand und „nach Landeplatz“ wirken nur hier; ball.py übernimmt davon nichts. Klang und Palette gelten auch für Helm: dieselben Presets wie auf der Seite „Ball-Klangpaletten“.
     </div>
     <details class="json">
       <summary>Zuordnung als Datei (für ball.py)</summary>
@@ -214,6 +236,7 @@ details.json textarea { width: 100%; min-height: 220px; margin-top: 10px; font: 
 
 <script>
 "use strict";
+const DATEN = {"standard":{"amp_attack":0.109545,"amp_decay":1.5,"amp_release":0.3,"amp_sustain":1.0,"arp_frequency":2.0,"arp_gate":0.5,"arp_octaves":1,"arp_on":0,"arp_pattern":0,"arp_sync":1,"arp_tempo":9,"beats_per_minute":2.0,"cross_modulation":0.0,"cutoff":80.0,"delay_dry_wet":0.5,"delay_feedback":0.4,"delay_frequency":2.0,"delay_on":0,"delay_sync":1,"delay_tempo":9,"distortion_on":0,"distortion_type":0,"distortion_drive":0.0,"distortion_mix":1.0,"fil_attack":0.0,"fil_decay":1.5,"fil_env_depth":0.0,"fil_release":1.5,"fil_sustain":0.5,"filter_drive":0.0,"filter_blend":0.0,"filter_style":0,"filter_shelf":0,"filter_on":0,"formant_on":0,"formant_x":0.5,"formant_y":0.5,"keytrack":0.0,"legato":0,"mod_attack":0.0,"mod_decay":1.5,"mod_release":1.5,"mod_sustain":0.5,"mono_lfo_1_amplitude":1.0,"mono_lfo_1_frequency":1.0,"mono_lfo_1_retrigger":2,"mono_lfo_1_sync":1,"mono_lfo_1_tempo":6,"mono_lfo_1_waveform":0,"mono_lfo_2_amplitude":1.0,"mono_lfo_2_frequency":1.0,"mono_lfo_2_retrigger":2,"mono_lfo_2_sync":1,"mono_lfo_2_tempo":7,"mono_lfo_2_waveform":0,"noise_volume":0.0,"num_steps":8,"osc_1_transpose":0,"osc_1_tune":0.0,"osc_1_unison_detune":10.0,"osc_1_unison_voices":1,"osc_1_volume":0.5477225575,"osc_1_waveform":4,"osc_2_transpose":0,"osc_2_tune":0.0,"osc_2_unison_detune":10.0,"osc_2_unison_voices":1,"osc_2_volume":0.5477225575,"osc_2_waveform":4,"osc_feedback_amount":0.0,"osc_feedback_transpose":0,"osc_feedback_tune":0.0,"pitch_bend_range":2,"poly_lfo_amplitude":1.0,"poly_lfo_frequency":1.0,"poly_lfo_sync":1,"poly_lfo_tempo":7,"poly_lfo_waveform":0,"polyphony":4,"portamento":-7.0,"portamento_type":0,"resonance":0.5,"reverb_damping":0.5,"reverb_dry_wet":0.5,"reverb_feedback":0.9,"reverb_on":0,"step_frequency":2.0,"step_smoothing":0.0,"stutter_frequency":3.0,"stutter_sync":1,"stutter_tempo":8,"stutter_on":0,"stutter_resample_frequency":1.0,"stutter_resample_sync":1,"stutter_resample_tempo":6,"stutter_softness":0.2,"sub_shuffle":0.0,"sub_octave":0,"sub_volume":0.0,"sub_waveform":2,"unison_1_harmonize":0,"unison_2_harmonize":0,"velocity_track":0.0,"volume":0.7071068},"paletten":[{"name":"Material","idee":"Physisch inspiriert: Gewicht, Oberfläche und Flug des Balls bestimmen den Klang.","presets":[{"name":"Ballon","beschreibung":"Luftharfe: klar gezupft, leicht gehaucht","drehung":"mehr Wind und Helligkeit","settings":{"amp_attack":0.05477,"amp_decay":1.26491,"amp_release":0.89443,"amp_sustain":0.0,"beats_per_minute":1.66667,"cutoff":90,"fil_decay":0.63246,"fil_env_depth":16,"fil_release":0.54772,"fil_sustain":0.0,"filter_on":1,"keytrack":0.5,"mono_lfo_1_retrigger":1,"noise_volume":0.14142,"osc_1_volume":0.74162,"osc_1_waveform":1,"osc_2_transpose":12,"osc_2_volume":0.44721,"osc_2_waveform":0,"polyphony":8,"resonance":0.2,"reverb_damping":0.4,"reverb_dry_wet":0.2,"reverb_feedback":0.88,"reverb_on":1,"velocity_track":0.5,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"noise_volume","amount":0.4},{"source":"mod_wheel","destination":"cutoff","amount":18}]}},{"name":"Medizinball","beschreibung":"Erdbass: dumpfer, satter Schlag","drehung":"Bass öffnet sich, wird knurriger","settings":{"amp_attack":0.04472,"amp_decay":0.94868,"amp_release":0.54772,"amp_sustain":0.15,"beats_per_minute":1.66667,"cutoff":52,"distortion_on":1,"distortion_drive":6,"distortion_mix":0.4,"fil_decay":0.34641,"fil_env_depth":30,"fil_release":0.3873,"fil_sustain":0.0,"filter_style":1,"filter_on":1,"mod_decay":0.17321,"mod_release":0.17321,"mod_sustain":0.0,"mono_lfo_1_retrigger":1,"osc_1_volume":0.89443,"osc_1_waveform":0,"osc_2_volume":0.31623,"osc_2_waveform":1,"resonance":0.15,"sub_volume":0.59161,"sub_waveform":0,"velocity_track":0.7,"volume":0.89443,"modulations":[{"source":"mod_envelope","destination":"osc_1_transpose","amount":5},{"source":"mod_wheel","destination":"cutoff","amount":30}]}},{"name":"Haar-Ball","beschreibung":"Rascheln: kurzes, trockenes Rauschen","drehung":"heller, zischender","settings":{"amp_attack":0.06325,"amp_decay":0.59161,"amp_release":0.5,"amp_sustain":0.15,"beats_per_minute":1.66667,"cutoff":90,"filter_blend":1.0,"filter_on":1,"keytrack":0.3,"mono_lfo_1_retrigger":1,"noise_volume":0.92195,"osc_1_volume":0.22361,"osc_1_waveform":2,"osc_2_volume":0.0,"osc_2_waveform":0,"polyphony":8,"resonance":0.35,"reverb_dry_wet":0.12,"reverb_feedback":0.85,"reverb_on":1,"velocity_track":0.6,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"cutoff","amount":16},{"source":"mod_wheel","destination":"noise_volume","amount":0.15}]}},{"name":"Softball","beschreibung":"Weiche Marimba: rund, warm, kurz","drehung":"heller","settings":{"amp_attack":0.04472,"amp_decay":0.83666,"amp_release":0.54772,"amp_sustain":0.0,"beats_per_minute":1.66667,"cross_modulation":0.03,"cutoff":92,"fil_decay":0.3873,"fil_env_depth":18,"fil_release":0.44721,"fil_sustain":0.0,"filter_on":1,"mono_lfo_1_retrigger":1,"osc_1_volume":0.84853,"osc_1_waveform":0,"osc_2_transpose":24,"osc_2_volume":0.24495,"osc_2_waveform":0,"polyphony":8,"resonance":0.15,"reverb_dry_wet":0.12,"reverb_feedback":0.85,"reverb_on":1,"velocity_track":0.7,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"cutoff","amount":16}]}},{"name":"Noppenball","beschreibung":"Rau und kratzig: verzerrte Säge, bissig","drehung":"mehr Verzerrung und Biss","settings":{"amp_attack":0.05477,"amp_decay":0.63246,"amp_release":0.3873,"amp_sustain":0.4,"beats_per_minute":1.66667,"cutoff":74,"distortion_on":1,"distortion_type":1,"distortion_drive":10,"distortion_mix":0.7,"fil_decay":0.44721,"fil_env_depth":24,"fil_release":0.3873,"fil_sustain":0.3,"filter_style":1,"filter_on":1,"mono_lfo_1_retrigger":1,"osc_1_unison_voices":3,"osc_1_volume":0.70711,"osc_1_waveform":3,"osc_2_transpose":-12,"osc_2_volume":0.5,"osc_2_waveform":2,"polyphony":8,"resonance":0.45,"velocity_track":0.5,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"distortion_drive","amount":14},{"source":"mod_wheel","destination":"resonance","amount":0.3}]}},{"name":"Tennisball","beschreibung":"Plopp: kurzer, heller Zupfer","drehung":"schärfer, quäkiger","settings":{"amp_attack":0.03162,"amp_decay":0.44721,"amp_release":0.31623,"amp_sustain":0.0,"beats_per_minute":1.66667,"cutoff":72,"fil_decay":0.24495,"fil_env_depth":50,"fil_release":0.28284,"fil_sustain":0.0,"filter_on":1,"mod_decay":0.12247,"mod_release":0.14142,"mod_sustain":0.0,"mono_lfo_1_retrigger":1,"osc_1_volume":0.6,"osc_1_waveform":2,"osc_2_transpose":19,"osc_2_volume":0.34641,"osc_2_waveform":0,"polyphony":8,"resonance":0.3,"velocity_track":0.85,"volume":0.89443,"modulations":[{"source":"mod_envelope","destination":"osc_1_transpose","amount":5},{"source":"mod_wheel","destination":"resonance","amount":0.4}]}}]},{"name":"Glocken und Holz","idee":"Alles wird angeschlagen: Glas, Gong, Holz, Blech. Klingt immer nach Instrument.","presets":[{"name":"Ballon","beschreibung":"Glasglocke: klar und hell","drehung":"glasiger, mehr Obertöne","settings":{"amp_attack":0.04472,"amp_decay":1.34164,"amp_release":0.89443,"amp_sustain":0.0,"beats_per_minute":1.66667,"cross_modulation":0.1,"mono_lfo_1_retrigger":1,"osc_1_volume":0.7746,"osc_1_waveform":0,"osc_2_transpose":12,"osc_2_volume":0.5,"osc_2_waveform":0,"polyphony":8,"reverb_damping":0.4,"reverb_dry_wet":0.2,"reverb_feedback":0.88,"reverb_on":1,"velocity_track":0.5,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"cross_modulation","amount":0.2}]}},{"name":"Medizinball","beschreibung":"Gong: tief und metallisch","drehung":"Gong wird schärfer","settings":{"amp_attack":0.04472,"amp_decay":1.58114,"amp_release":1.09545,"amp_sustain":0.0,"beats_per_minute":1.66667,"cross_modulation":0.25,"fil_decay":0.7746,"fil_env_depth":24,"fil_release":0.7746,"fil_sustain":0.0,"filter_on":1,"mono_lfo_1_retrigger":1,"osc_1_volume":0.89443,"osc_1_waveform":0,"osc_2_transpose":5,"osc_2_tune":0.41,"osc_2_volume":0.44721,"osc_2_waveform":0,"resonance":0.15,"reverb_damping":0.4,"reverb_dry_wet":0.18,"reverb_feedback":0.88,"reverb_on":1,"velocity_track":0.7,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"cross_modulation","amount":0.15}]}},{"name":"Haar-Ball","beschreibung":"Shaker: feines, kurzes Rieseln","drehung":"pfeifender","settings":{"amp_attack":0.06325,"amp_decay":0.37417,"amp_release":0.31623,"amp_sustain":0.0,"beats_per_minute":1.66667,"cutoff":98,"filter_blend":2.0,"filter_on":1,"mono_lfo_1_retrigger":1,"noise_volume":0.89443,"osc_1_volume":0.0,"osc_1_waveform":0,"osc_2_volume":0.0,"osc_2_waveform":0,"polyphony":12,"resonance":0.25,"velocity_track":0.7,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"resonance","amount":0.4}]}},{"name":"Softball","beschreibung":"Holzblock und Marimba: trocken und kurz","drehung":"holziger, heller","settings":{"amp_attack":0.03162,"amp_decay":0.54772,"amp_release":0.3873,"amp_sustain":0.0,"beats_per_minute":1.66667,"cross_modulation":0.05,"cutoff":90,"fil_decay":0.24495,"fil_env_depth":26,"fil_release":0.28284,"fil_sustain":0.0,"filter_on":1,"mono_lfo_1_retrigger":1,"osc_1_volume":0.83666,"osc_1_waveform":0,"osc_2_transpose":12,"osc_2_volume":0.3,"osc_2_waveform":1,"polyphony":8,"resonance":0.15,"reverb_dry_wet":0.1,"reverb_feedback":0.85,"reverb_on":1,"velocity_track":0.75,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"cutoff","amount":18}]}},{"name":"Noppenball","beschreibung":"Blechdose: metallisch, scheppernd","drehung":"heller, blecherner","settings":{"amp_attack":0.03162,"amp_decay":0.59161,"amp_release":0.44721,"amp_sustain":0.0,"beats_per_minute":1.66667,"cross_modulation":0.4,"distortion_on":1,"distortion_type":2,"distortion_drive":6,"distortion_mix":0.4,"filter_blend":1.0,"filter_on":1,"mono_lfo_1_retrigger":1,"osc_1_volume":0.7746,"osc_1_waveform":2,"osc_2_transpose":13,"osc_2_waveform":2,"polyphony":8,"resonance":0.4,"velocity_track":0.6,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"cutoff","amount":20}]}},{"name":"Tennisball","beschreibung":"Kalimba: zarter, glockiger Zupfer","drehung":"metallischer","settings":{"amp_attack":0.03162,"amp_decay":0.89443,"amp_release":0.54772,"amp_sustain":0.0,"beats_per_minute":1.66667,"cross_modulation":0.06,"cutoff":100,"fil_decay":0.2,"fil_env_depth":10,"fil_release":0.24495,"fil_sustain":0.0,"filter_on":1,"mono_lfo_1_retrigger":1,"osc_1_volume":0.8,"osc_1_waveform":0,"osc_2_transpose":24,"osc_2_volume":0.3,"osc_2_waveform":0,"polyphony":8,"resonance":0.15,"velocity_track":0.8,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"cross_modulation","amount":0.12}]}}]},{"name":"Arcade","idee":"8-Bit wie ein altes Videospiel: verspielt, eindeutig, sofort als Spiel erkennbar.","presets":[{"name":"Ballon","beschreibung":"Bonus-Ping: zwei Oktaven, kurzer Sprung nach oben","drehung":"kantiger","settings":{"amp_attack":0.04472,"amp_decay":0.7746,"amp_release":0.5,"amp_sustain":0.2,"beats_per_minute":1.66667,"mod_decay":0.2,"mod_release":0.17321,"mod_sustain":0.0,"mono_lfo_1_retrigger":1,"osc_1_waveform":2,"osc_2_transpose":12,"osc_2_volume":0.34641,"osc_2_waveform":2,"polyphony":8,"velocity_track":0.4,"volume":0.89443,"modulations":[{"source":"mod_envelope","destination":"osc_1_transpose","amount":12},{"source":"mod_wheel","destination":"cross_modulation","amount":0.15}]}},{"name":"Medizinball","beschreibung":"8-Bit-Bass: stufig, kräftig","drehung":"Bass wird heller","settings":{"amp_attack":0.04472,"amp_decay":0.70711,"amp_release":0.34641,"amp_sustain":0.3,"beats_per_minute":1.66667,"cutoff":70,"filter_on":1,"mod_decay":0.17321,"mod_release":0.17321,"mod_sustain":0.0,"mono_lfo_1_retrigger":1,"osc_1_volume":0.8,"osc_1_waveform":7,"osc_2_volume":0.0,"osc_2_waveform":0,"resonance":0.15,"sub_volume":0.5,"velocity_track":0.6,"volume":0.89443,"modulations":[{"source":"mod_envelope","destination":"osc_1_transpose","amount":7},{"source":"mod_wheel","destination":"cutoff","amount":45}]}},{"name":"Haar-Ball","beschreibung":"Bit-Zischen: kurzes, digitales Rauschen","drehung":"heller","settings":{"amp_attack":0.04472,"amp_decay":0.3873,"amp_release":0.28284,"amp_sustain":0.0,"beats_per_minute":1.66667,"cutoff":70,"filter_blend":2.0,"filter_on":1,"mono_lfo_1_retrigger":1,"noise_volume":0.7746,"osc_1_volume":0.31623,"osc_1_waveform":5,"osc_2_volume":0.0,"osc_2_waveform":0,"polyphony":12,"resonance":0.15,"velocity_track":0.6,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"cutoff","amount":30}]}},{"name":"Softball","beschreibung":"Pulse-Melodie: klare Spielmelodie","drehung":"Vibrato (nur beim Drehen)","settings":{"amp_attack":0.04472,"amp_decay":0.63246,"amp_release":0.34641,"amp_sustain":0.4,"beats_per_minute":1.66667,"mono_lfo_1_amplitude":0.0,"mono_lfo_1_frequency":2.58496,"mono_lfo_1_retrigger":1,"mono_lfo_1_sync":0,"osc_1_volume":0.7,"osc_1_waveform":2,"osc_2_transpose":12,"osc_2_volume":0.3,"osc_2_waveform":1,"polyphony":8,"velocity_track":0.5,"volume":0.89443,"modulations":[{"source":"mono_lfo_1","destination":"osc_1_tune","amount":0.3},{"source":"mod_wheel","destination":"mono_lfo_1_amplitude","amount":1.0}]}},{"name":"Noppenball","beschreibung":"Glitch: gefaltete, harte Töne","drehung":"kaputter","settings":{"amp_attack":0.03162,"amp_decay":0.5,"amp_release":0.31623,"amp_sustain":0.2,"beats_per_minute":1.66667,"distortion_on":1,"distortion_type":3,"distortion_drive":8,"distortion_mix":0.8,"mono_lfo_1_retrigger":1,"osc_1_volume":0.7,"osc_1_waveform":10,"osc_2_transpose":-5,"osc_2_volume":0.4,"osc_2_waveform":3,"polyphony":8,"velocity_track":0.5,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"distortion_drive","amount":12}]}},{"name":"Tennisball","beschreibung":"Blip: kurzer, heller Ton","drehung":"höher","settings":{"amp_attack":0.03162,"amp_decay":0.34641,"amp_release":0.22361,"amp_sustain":0.0,"beats_per_minute":1.66667,"mod_decay":0.17321,"mod_release":0.14142,"mod_sustain":0.0,"mono_lfo_1_retrigger":1,"osc_1_volume":0.70711,"osc_1_waveform":2,"osc_2_volume":0.0,"osc_2_waveform":0,"polyphony":8,"velocity_track":0.8,"volume":0.89443,"modulations":[{"source":"mod_envelope","destination":"osc_1_transpose","amount":12},{"source":"mod_wheel","destination":"osc_1_tune","amount":1.0}]}}]},{"name":"Wolken","idee":"Abstrakt und weich: runde Flächen, die trotzdem sofort einsetzen.","presets":[{"name":"Ballon","beschreibung":"Helle Fläche: weit, aber klar","drehung":"heller","settings":{"amp_attack":0.24495,"amp_decay":1.22474,"amp_release":1.0,"amp_sustain":0.5,"beats_per_minute":1.66667,"filter_on":1,"mono_lfo_1_retrigger":1,"osc_1_unison_detune":6,"osc_1_unison_voices":3,"osc_1_volume":0.5,"osc_1_waveform":3,"osc_2_transpose":12,"osc_2_volume":0.4,"osc_2_waveform":0,"polyphony":8,"resonance":0.15,"reverb_damping":0.4,"reverb_dry_wet":0.3,"reverb_on":1,"velocity_track":0.4,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"cutoff","amount":24}]}},{"name":"Medizinball","beschreibung":"Tiefe Fläche: ruhiger, voller Bass","drehung":"öffnet sich","settings":{"amp_attack":0.2,"amp_decay":1.41421,"amp_release":0.89443,"amp_sustain":0.6,"beats_per_minute":1.66667,"cutoff":54,"filter_style":1,"filter_on":1,"mono_lfo_1_retrigger":1,"osc_1_volume":0.6,"osc_1_waveform":3,"osc_2_volume":0.0,"osc_2_waveform":0,"resonance":0.2,"reverb_dry_wet":0.2,"reverb_feedback":0.88,"reverb_on":1,"sub_volume":0.6,"sub_waveform":0,"velocity_track":0.4,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"cutoff","amount":30}]}},{"name":"Haar-Ball","beschreibung":"Wind: weiches, gefiltertes Rauschen","drehung":"Wind wird höher","settings":{"amp_attack":0.22361,"amp_decay":1.09545,"amp_release":0.89443,"amp_sustain":0.4,"beats_per_minute":1.66667,"filter_blend":1.0,"filter_on":1,"keytrack":1.0,"mono_lfo_1_retrigger":1,"noise_volume":0.97468,"osc_1_volume":0.0,"osc_1_waveform":0,"osc_2_volume":0.0,"osc_2_waveform":0,"polyphony":8,"reverb_damping":0.4,"reverb_dry_wet":0.25,"reverb_on":1,"velocity_track":0.4,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"cutoff","amount":20}]}},{"name":"Softball","beschreibung":"Warme Fläche: weich, rund","drehung":"heller","settings":{"amp_attack":0.2,"amp_decay":1.22474,"amp_release":0.89443,"amp_sustain":0.5,"beats_per_minute":1.66667,"cutoff":76,"filter_on":1,"mono_lfo_1_retrigger":1,"osc_1_volume":0.7,"osc_1_waveform":1,"osc_2_transpose":12,"osc_2_volume":0.3,"osc_2_waveform":3,"polyphony":8,"resonance":0.15,"reverb_dry_wet":0.25,"reverb_on":1,"velocity_track":0.4,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"cutoff","amount":20}]}},{"name":"Noppenball","beschreibung":"Raue Fläche: körnig, aber stabil","drehung":"rauer","settings":{"amp_attack":0.2,"amp_decay":1.22474,"amp_release":0.89443,"amp_sustain":0.5,"beats_per_minute":1.66667,"cutoff":68,"distortion_on":1,"distortion_drive":6,"distortion_mix":0.4,"filter_style":1,"filter_on":1,"mono_lfo_1_retrigger":1,"osc_1_unison_detune":8,"osc_1_unison_voices":3,"osc_1_volume":0.6,"osc_1_waveform":2,"osc_2_volume":0.0,"osc_2_waveform":0,"polyphony":8,"resonance":0.35,"reverb_damping":0.4,"reverb_dry_wet":0.25,"reverb_on":1,"velocity_track":0.4,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"distortion_drive","amount":10},{"source":"mod_wheel","destination":"cutoff","amount":12}]}},{"name":"Tennisball","beschreibung":"Glastropfen mit kurzem Echo","drehung":"längeres Echo","settings":{"amp_attack":0.04472,"amp_decay":0.7746,"amp_release":0.63246,"amp_sustain":0.0,"beats_per_minute":1.66667,"cross_modulation":0.06,"delay_dry_wet":0.18,"delay_feedback":0.25,"delay_on":1,"delay_tempo":8,"mono_lfo_1_retrigger":1,"osc_1_volume":0.7746,"osc_1_waveform":0,"osc_2_transpose":19,"osc_2_volume":0.2,"osc_2_waveform":0,"polyphony":8,"reverb_damping":0.4,"reverb_dry_wet":0.2,"reverb_feedback":0.88,"reverb_on":1,"velocity_track":0.6,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"delay_feedback","amount":0.35}]}}]},{"name":"Trommelkreis","idee":"Rhythmus statt Melodie: jeder Ball ist eine Trommel. Passt zur Option „Rhythmus“.","presets":[{"name":"Ballon","beschreibung":"Becken: heller, kurzer Crash","drehung":"dunkler","settings":{"amp_attack":0.04472,"amp_decay":0.94868,"amp_release":0.70711,"amp_sustain":0.0,"beats_per_minute":1.66667,"cross_modulation":0.4,"cutoff":90,"filter_blend":2.0,"filter_on":1,"mono_lfo_1_retrigger":1,"noise_volume":0.63246,"osc_1_volume":0.31623,"osc_1_waveform":2,"osc_2_transpose":7,"osc_2_volume":0.24495,"osc_2_waveform":2,"polyphony":8,"resonance":0.2,"reverb_damping":0.3,"reverb_dry_wet":0.15,"reverb_feedback":0.88,"reverb_on":1,"velocity_track":0.6,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"cutoff","amount":-20}]}},{"name":"Medizinball","beschreibung":"Kick: Bassdrum","drehung":"härter","settings":{"amp_attack":0.03162,"amp_decay":0.59161,"amp_release":0.34641,"amp_sustain":0.0,"beats_per_minute":1.66667,"distortion_on":1,"distortion_drive":6,"distortion_mix":0.5,"mod_decay":0.22361,"mod_release":0.17321,"mod_sustain":0.0,"mono_lfo_1_retrigger":1,"osc_1_volume":1.0,"osc_1_waveform":0,"osc_2_volume":0.0,"osc_2_waveform":0,"polyphony":2,"velocity_track":0.8,"volume":0.89443,"modulations":[{"source":"mod_envelope","destination":"osc_1_transpose","amount":24},{"source":"mod_wheel","destination":"distortion_drive","amount":12}]}},{"name":"Haar-Ball","beschreibung":"Shaker","drehung":"weicher","settings":{"amp_attack":0.06325,"amp_decay":0.31623,"amp_release":0.24495,"amp_sustain":0.0,"beats_per_minute":1.66667,"cutoff":104,"filter_blend":2.0,"filter_on":1,"mono_lfo_1_retrigger":1,"noise_volume":0.84853,"osc_1_volume":0.0,"osc_1_waveform":0,"osc_2_volume":0.0,"osc_2_waveform":0,"polyphony":12,"resonance":0.15,"velocity_track":0.8,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"cutoff","amount":-14}]}},{"name":"Softball","beschreibung":"Tom","drehung":"heller","settings":{"amp_attack":0.03162,"amp_decay":0.59161,"amp_release":0.3873,"amp_sustain":0.0,"beats_per_minute":1.66667,"fil_decay":0.2,"fil_env_depth":20,"fil_release":0.24495,"fil_sustain":0.0,"filter_on":1,"mod_decay":0.2,"mod_release":0.17321,"mod_sustain":0.0,"mono_lfo_1_retrigger":1,"noise_volume":0.14142,"osc_1_volume":0.89443,"osc_1_waveform":0,"osc_2_volume":0.3,"osc_2_waveform":1,"polyphony":8,"resonance":0.15,"velocity_track":0.8,"volume":0.89443,"modulations":[{"source":"mod_envelope","destination":"osc_1_transpose","amount":7},{"source":"mod_wheel","destination":"cutoff","amount":20}]}},{"name":"Noppenball","beschreibung":"Snare","drehung":"mehr Teppich","settings":{"amp_attack":0.03162,"amp_decay":0.42426,"amp_release":0.31623,"amp_sustain":0.0,"beats_per_minute":1.66667,"cutoff":66,"distortion_on":1,"distortion_drive":4,"distortion_mix":0.4,"filter_blend":2.0,"filter_on":1,"mod_decay":0.17321,"mod_release":0.17321,"mod_sustain":0.0,"mono_lfo_1_retrigger":1,"noise_volume":0.89443,"osc_1_volume":0.63246,"osc_1_waveform":1,"osc_2_volume":0.0,"osc_2_waveform":0,"polyphony":8,"resonance":0.15,"velocity_track":0.8,"volume":0.89443,"modulations":[{"source":"mod_envelope","destination":"osc_1_transpose","amount":7},{"source":"mod_wheel","destination":"noise_volume","amount":0.15}]}},{"name":"Tennisball","beschreibung":"Clave: kurzer, heller Klick","drehung":"höher","settings":{"amp_attack":0.03162,"amp_decay":0.3,"amp_release":0.22361,"amp_sustain":0.0,"beats_per_minute":1.66667,"cutoff":86,"filter_blend":1.0,"filter_on":1,"mono_lfo_1_retrigger":1,"osc_1_volume":0.6,"osc_1_waveform":2,"osc_2_transpose":17,"osc_2_volume":0.6,"osc_2_waveform":0,"polyphony":8,"resonance":0.3,"velocity_track":0.8,"volume":0.89443,"modulations":[{"source":"mod_wheel","destination":"cutoff","amount":12}]}}]}]};
 // ---------------------------------------------------------------------------
 // Begriffe (dieselben Namen wie in ball.py)
 // ---------------------------------------------------------------------------
@@ -227,7 +250,6 @@ const SKALEN_NAMEN = {
   blues: "Blues", ganzton: "Ganzton", chromatisch: "Chromatisch",
 };
 const NOTENNAMEN = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B", "H"];
-const KLAENGE = { pad: "Fläche", pluck: "Zupfen", bass: "Bass", glocke: "Glocke", perkussion: "Trommel", rauschen: "Rauschen" };
 const AUSLOESER = [
   ["abflug", "Abflug", "verlässt die Hand"],
   ["landung", "Landung", "Fang oder Aufprall"],
@@ -240,27 +262,39 @@ const FORTLAUFEND = [
 ];
 const F_AUSLOESER = { nichts: "nichts", ton: "Ton", ton_halten: "Ton bis Landung", schlag: "Schlag", akkord: "Akkord" };
 const F_RUHE = { stille: "alles verstummt", nichts: "weiterklingen" };
-const F_FORTLAUFEND = { nichts: "nichts", filter: "Filter (dunkel → hell)", lautstaerke: "Lautstärke", tonhoehe: "Tonhöhe biegen", hall: "Hall", vibrato: "Vibrato", verzerrung: "Verzerrung" };
+const F_FORTLAUFEND = { nichts: "nichts", filter: "Filter (dunkel → hell)", lautstaerke: "Lautstärke", tonhoehe: "Tonhöhe (neue Töne)", hall: "Hall", vibrato: "Mod-Rad des Presets (CC 1)", verzerrung: "Verzerrung", panorama: "Panorama links/rechts" };
+const POSITION = [
+  ["pos_x", "Links ↔ rechts", "Ort im Raum, quer"],
+  ["pos_y", "Hinten ↔ vorne", "Ort im Raum, längs"],
+  ["pos_z", "Höhe", "0 bis 3 m im Flug"],
+];
+const ZONEN = { aus: "aus", akkorde: "Landeplatz wechselt die Harmonie" };
+const ZONEN_VERSATZ = [0, 5, 7, 3];   // links hinten, rechts hinten, links vorne, rechts vorne
+const ABSTAND = { nichts: "wirkt nicht", hall: "verteilt = viel Hall", lautstaerke: "nah = lauter", filter: "nah = heller" };
 const TONHOEHE = { skala_schritt: "nächster Skalenton", zufall: "zufällig aus Tonleiter", flughoehe: "nach Wurfhöhe", fest: "Grundton", ort: "nach Landeplatz" };
 
 // Balltypen: Physik für die Simulation und ein Vorschlag, wie er klingen könnte
 const TYPEN = {
-  softball:   { name: "Softball",   farbe: "#e4572e", d: 0.18, sprung: 0.45, reibung: 1.6, wurf: 1.0, klang: "pad", oktave: 0,
-    aktionen: { abflug: ["ton_halten", "skala_schritt", 0], landung: ["schlag", "flughoehe", 1], stoss: ["schlag", "fest", -1], ruhe: ["stille"], drehung: ["filter"], bewegung: ["lautstaerke"] } },
-  tennisball: { name: "Tennisball", farbe: "#c8d93a", d: 0.067, sprung: 0.72, reibung: 0.8, wurf: 1.1, klang: "pluck", oktave: 1,
-    aktionen: { abflug: ["nichts", "skala_schritt", 0], landung: ["ton", "flughoehe", 0], stoss: ["schlag", "zufall", 0], ruhe: ["nichts"], drehung: ["vibrato"], bewegung: ["nichts"] } },
-  medizinball:{ name: "Medizinball", farbe: "#6b4a34", d: 0.30, sprung: 0.08, reibung: 3.2, wurf: 0.5, klang: "bass", oktave: -1,
-    aktionen: { abflug: ["nichts", "fest", 0], landung: ["schlag", "fest", 0], stoss: ["schlag", "fest", 0], ruhe: ["nichts"], drehung: ["filter"], bewegung: ["nichts"] } },
-  noppenball: { name: "Noppenball", farbe: "#7b4fd6", d: 0.15, sprung: 0.55, reibung: 2.6, wurf: 0.9, klang: "rauschen", oktave: 1,
-    aktionen: { abflug: ["nichts", "zufall", 0], landung: ["schlag", "zufall", 0], stoss: ["schlag", "zufall", 0], ruhe: ["stille"], drehung: ["verzerrung"], bewegung: ["filter"] } },
-  wasserball: { name: "Wasserball", farbe: "#2a8fd6", d: 0.40, sprung: 0.5, reibung: 1.0, wurf: 0.8, klang: "glocke", oktave: 1,
-    aktionen: { abflug: ["akkord", "skala_schritt", 0], landung: ["ton", "flughoehe", 0], stoss: ["nichts", "fest", 0], ruhe: ["nichts"], drehung: ["hall"], bewegung: ["nichts"] } },
-  basketball: { name: "Basketball", farbe: "#e07b24", d: 0.24, sprung: 0.75, reibung: 0.9, wurf: 0.9, klang: "perkussion", oktave: -1,
-    aktionen: { abflug: ["nichts", "fest", 0], landung: ["schlag", "flughoehe", 0], stoss: ["schlag", "fest", 0], ruhe: ["nichts"], drehung: ["nichts"], bewegung: ["nichts"] } },
+  softball:   { name: "Softball",   farbe: "#e4572e", d: 0.18, sprung: 0.45, reibung: 1.6, wurf: 1.0, luft: 0, klang: "Softball", oktave: 0,
+    aktionen: { abflug: ["ton_halten", "skala_schritt", 0], landung: ["schlag", "flughoehe", 1], stoss: ["schlag", "fest", -1], ruhe: ["stille"], drehung: ["filter"], bewegung: ["nichts"], pos_x: ["panorama"], pos_y: ["lautstaerke"], pos_z: ["nichts"] } },
+  tennisball: { name: "Tennisball", farbe: "#c8d93a", d: 0.067, sprung: 0.72, reibung: 0.8, wurf: 1.1, luft: 0, klang: "Tennisball", oktave: 1,
+    aktionen: { abflug: ["nichts", "skala_schritt", 0], landung: ["ton", "ort", 0], stoss: ["schlag", "zufall", 0], ruhe: ["nichts"], drehung: ["vibrato"], bewegung: ["nichts"], pos_x: ["panorama"], pos_y: ["hall"], pos_z: ["nichts"] } },
+  medizinball:{ name: "Medizinball", farbe: "#6b4a34", d: 0.30, sprung: 0.08, reibung: 3.2, wurf: 0.5, luft: 0, klang: "Medizinball", oktave: -1,
+    aktionen: { abflug: ["nichts", "fest", 0], landung: ["schlag", "fest", 0], stoss: ["schlag", "fest", 0], ruhe: ["nichts"], drehung: ["filter"], bewegung: ["nichts"], pos_x: ["panorama"], pos_y: ["filter"], pos_z: ["nichts"] } },
+  noppenball: { name: "Noppenball", farbe: "#7b4fd6", d: 0.15, sprung: 0.55, reibung: 2.6, wurf: 0.9, luft: 0, klang: "Noppenball", oktave: 0,
+    aktionen: { abflug: ["nichts", "zufall", 0], landung: ["schlag", "zufall", 0], stoss: ["schlag", "zufall", 0], ruhe: ["stille"], drehung: ["verzerrung"], bewegung: ["vibrato"], pos_x: ["panorama"], pos_y: ["verzerrung"], pos_z: ["nichts"] } },
+  luftballon: { name: "Luftballon", farbe: "#2a8fd6", d: 0.30, sprung: 0.3, reibung: 2.0, wurf: 0.6, luft: 2.4, klang: "Ballon", oktave: 1,
+    aktionen: { abflug: ["ton", "skala_schritt", 0], landung: ["ton", "flughoehe", 0], stoss: ["nichts", "fest", 0], ruhe: ["nichts"], drehung: ["nichts"], bewegung: ["nichts"], pos_x: ["panorama"], pos_y: ["nichts"], pos_z: ["vibrato"] } },
+  haarball:   { name: "Haar-Ball",  farbe: "#b08d57", d: 0.16, sprung: 0.2, reibung: 3.0, wurf: 0.8, luft: 0, klang: "Haar-Ball", oktave: 0,
+    aktionen: { abflug: ["nichts", "fest", 0], landung: ["schlag", "zufall", 0], stoss: ["schlag", "zufall", 0], ruhe: ["stille"], drehung: ["nichts"], bewegung: ["lautstaerke"], pos_x: ["panorama"], pos_y: ["filter"], pos_z: ["nichts"] } },
+  wasserball: { name: "Wasserball", farbe: "#3fb0e8", d: 0.40, sprung: 0.5, reibung: 1.0, wurf: 0.8, luft: 0.6, klang: "Ballon", oktave: 1,
+    aktionen: { abflug: ["akkord", "skala_schritt", 0], landung: ["ton", "flughoehe", 0], stoss: ["nichts", "fest", 0], ruhe: ["nichts"], drehung: ["hall"], bewegung: ["nichts"], pos_x: ["panorama"], pos_y: ["nichts"], pos_z: ["filter"] } },
+  basketball: { name: "Basketball", farbe: "#e07b24", d: 0.24, sprung: 0.75, reibung: 0.9, wurf: 0.9, luft: 0, klang: "Softball", oktave: -1,
+    aktionen: { abflug: ["nichts", "fest", 0], landung: ["schlag", "flughoehe", 0], stoss: ["schlag", "fest", 0], ruhe: ["nichts"], drehung: ["nichts"], bewegung: ["nichts"], pos_x: ["panorama"], pos_y: ["lautstaerke"], pos_z: ["nichts"] } },
 };
 
 const RAUM_B = 8, RAUM_T = 6, G = 9.81, HAND = 1.0;
-const SPEICHER = "ballklang-zuordnung-v1";
+const SPEICHER = "ballklang-zuordnung-v2";
 
 function aktionenAusTyp(typ) {
   const a = {};
@@ -275,7 +309,8 @@ function neuerBall(id, typ) {
   return { id, name: t.name, typ, farbe: t.farbe, klang: t.klang, kanal: id, oktave: t.oktave, aktiv: true, aktionen: aktionenAusTyp(typ) };
 }
 function beispiel() {
-  return { grundton: 48, skala: "moll_pentatonik", baelle: [neuerBall(1, "softball"), neuerBall(2, "tennisball"), neuerBall(3, "medizinball")] };
+  return { grundton: 48, skala: "moll_pentatonik", palette: "Material", raum: { zonen: "akkorde", abstand: "hall" },
+    baelle: [neuerBall(1, "softball"), neuerBall(2, "tennisball"), neuerBall(3, "medizinball")] };
 }
 
 let zu = beispiel();
@@ -283,6 +318,8 @@ try {
   const gespeichert = JSON.parse(localStorage.getItem(SPEICHER) || "null");
   if (gespeichert && Array.isArray(gespeichert.baelle)) zu = gespeichert;
 } catch (e) { /* ohne Speicher geht es auch */ }
+let harmonie = 0;                 // Versatz in Halbtönen durch die Bodenzonen
+const letzteQuellen = {};         // letzte Werte je Ball: Drehung, Bewegung, Position
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const $ = (s, el = document) => el.querySelector(s);
@@ -293,177 +330,264 @@ function notenName(n) { return NOTENNAMEN[n % 12] + (Math.floor(n / 12) - 1); }
 function komma(x, stellen = 2) { return x.toFixed(stellen).replace(".", ","); }
 
 // ---------------------------------------------------------------------------
-// Klang (Web Audio): je Ball ein Kanalzug, je Ton eine Stimme
+// Klang: Helms Aufbau mit Web Audio nachgebaut (wie auf der Seite „Ball-Klangpaletten“).
+// Jede Note läuft durch den Kanalzug ihres Balls: Verzerrung → Filter → Lautstärke → Panorama,
+// dazu ein Hall-Weg. Diesen Kanalzug steuern Drehung, Bewegung und Position.
 // ---------------------------------------------------------------------------
+const PAL = DATEN.paletten, STD = DATEN.standard;
+const BEREICH = {
+  cutoff: [28, 127], osc_1_transpose: [-48, 48], osc_2_transpose: [-48, 48], osc_1_tune: [-1, 1], osc_2_tune: [-1, 1],
+  noise_volume: [0, 1], osc_1_volume: [0, 1], osc_2_volume: [0, 1], sub_volume: [0, 1], cross_modulation: [0, 0.5],
+  resonance: [0, 1], distortion_drive: [-30, 30], mono_lfo_1_frequency: [-7, 6], mono_lfo_1_amplitude: [-1, 1],
+  delay_feedback: [-1, 1],
+};
 let ctx = null, master = null, hallBus = null, rauschPuffer = null, tonAn = false;
-const zuege = {};
+const zuege = {}, wellenCache = new Map(), busse = new Map();
+
+function palette() { return PAL.find((p) => p.name === zu.palette) || PAL[0]; }
+function presetVon(b) { const p = palette(); return p.presets.find((x) => x.name === b.klang) || p.presets[0]; }
 
 function audioStart() {
   if (ctx) { if (ctx.state === "suspended") ctx.resume(); return; }
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   const komp = ctx.createDynamicsCompressor();
-  komp.threshold.value = -14; komp.ratio.value = 4;
+  komp.threshold.value = -12; komp.ratio.value = 4;
   komp.connect(ctx.destination);
   master = ctx.createGain(); master.gain.value = 0.8; master.connect(komp);
   const hall = ctx.createConvolver();
-  const laenge = ctx.sampleRate * 2.4, ir = ctx.createBuffer(2, laenge, ctx.sampleRate);
+  const laenge = Math.floor(ctx.sampleRate * 2.2), ir = ctx.createBuffer(2, laenge, ctx.sampleRate);
   for (let k = 0; k < 2; k++) {
     const d = ir.getChannelData(k);
-    for (let i = 0; i < laenge; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / laenge, 2.6);
+    for (let i = 0; i < laenge; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / laenge, 4);
   }
   hall.buffer = ir;
-  hallBus = ctx.createGain(); hallBus.gain.value = 0.6; hallBus.connect(hall); hall.connect(komp);
-  rauschPuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+  hallBus = ctx.createGain(); hallBus.gain.value = 0.7; hallBus.connect(hall); hall.connect(komp);
+  rauschPuffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
   const r = rauschPuffer.getChannelData(0);
   for (let i = 0; i < r.length; i++) r[i] = Math.random() * 2 - 1;
   tonAn = true;
   zeigeTon();
 }
 
+function form(welle, t) {
+  const saege = 2 * t - 1, dreieck = 1 - 4 * Math.abs(t - 0.5);
+  switch (welle) {
+    case 5: return Math.floor(t * 3) - 1;
+    case 6: return (Math.floor(t * 4) / 3) * 2 - 1;
+    case 7: return (Math.floor(t * 8) / 7) * 2 - 1;
+    case 8: return Math.round(dreieck * 1.5) / 1.5;
+    case 9: return Math.round(dreieck * 2.5) / 2.5;
+    case 10: return Math.round(dreieck * 4.5) / 4.5;
+    default: return saege;
+  }
+}
+function welle(osz, nr) {
+  const typ = ["sine", "triangle", "square", "sawtooth", "sawtooth"][nr];
+  if (typ) { osz.type = typ; return; }
+  if (!wellenCache.has(nr)) {
+    const N = 1024, H = 64, re = new Float32Array(H), im = new Float32Array(H);
+    for (let k = 1; k < H; k++) {
+      let a = 0, c = 0;
+      for (let i = 0; i < N; i++) { const x = form(nr, i / N), w = (2 * Math.PI * k * i) / N; a += x * Math.cos(w); c += x * Math.sin(w); }
+      re[k] = (2 * a) / N; im[k] = (2 * c) / N;
+    }
+    wellenCache.set(nr, ctx.createPeriodicWave(re, im));
+  }
+  osz.setPeriodicWave(wellenCache.get(nr));
+}
+function verzerrKurve(typ, driveDb) {
+  const g = Math.pow(10, driveDb / 20), n = 1024, k = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = ((i / (n - 1)) * 2 - 1) * g;
+    if (typ === 1) k[i] = clamp(x, -1, 1);
+    else if (typ === 2) { const y = ((x + 1) % 4 + 4) % 4; k[i] = y < 2 ? y - 1 : 3 - y; }
+    else if (typ === 3) k[i] = Math.sin((x * Math.PI) / 2);
+    else k[i] = Math.tanh(x);
+  }
+  return k;
+}
+
 function zug(b) {
   if (zuege[b.id]) return zuege[b.id];
-  const z = { stimmen: new Set(), bend: 0, drive: -1 };
+  const z = { stimmen: new Set(), bend: 0, modrad: 0, drive: -1 };
   z.eingang = ctx.createGain();
   z.shaper = ctx.createWaveShaper();
-  z.filter = ctx.createBiquadFilter(); z.filter.type = "lowpass"; z.filter.Q.value = 2;
+  z.filter = ctx.createBiquadFilter(); z.filter.type = "lowpass"; z.filter.Q.value = 0.9; z.filter.frequency.value = 18000;
   z.vol = ctx.createGain();
-  z.hall = ctx.createGain();
+  z.hall = ctx.createGain(); z.hall.gain.value = 0.06;
   z.pan = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
   z.eingang.connect(z.shaper); z.shaper.connect(z.filter); z.filter.connect(z.vol); z.vol.connect(z.pan); z.pan.connect(master);
   z.vol.connect(z.hall); z.hall.connect(hallBus);
-  z.lfo = ctx.createOscillator(); z.lfo.frequency.value = 5.5;
-  z.lfoTiefe = ctx.createGain(); z.lfoTiefe.gain.value = 0;
-  z.lfo.connect(z.lfoTiefe); z.lfo.start();
   zuege[b.id] = z;
-  grundwerte(b);
+  setzeDrive(z, 0);
   return z;
 }
-
 function setzeDrive(z, menge) {
   if (Math.abs(menge - z.drive) < 0.04) return;
   z.drive = menge;
-  const k = menge * 40, n = 512, kurve = new Float32Array(n);
+  const k = menge * 30, n = 512, kurve = new Float32Array(n);
   for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; kurve[i] = k > 0 ? Math.tanh(x * (1 + k)) / Math.tanh(1 + k) : x; }
   z.shaper.curve = kurve;
 }
 
-// Was nicht zugeordnet ist, steht auf einem festen Wert
-function grundwerte(b) {
-  if (!ctx || !zuege[b.id]) return;
-  const z = zuege[b.id], t = ctx.currentTime, belegt = new Set(FORTLAUFEND.map(([k]) => b.aktionen[k]?.funktion));
-  if (!belegt.has("filter")) z.filter.frequency.setTargetAtTime(b.klang === "bass" ? 1400 : 4200, t, 0.05);
-  if (!belegt.has("lautstaerke")) z.vol.gain.setTargetAtTime(0.85, t, 0.05);
-  if (!belegt.has("hall")) z.hall.gain.setTargetAtTime(0.25, t, 0.05);
-  if (!belegt.has("vibrato")) z.lfoTiefe.gain.setTargetAtTime(0, t, 0.05);
-  if (!belegt.has("verzerrung")) setzeDrive(z, 0);
-  if (!belegt.has("tonhoehe")) biege(z, 0);
-  if (z.pan.pan) z.pan.pan.value = clamp((zu.baelle.indexOf(b) - (zu.baelle.length - 1) / 2) * 0.35, -0.7, 0.7);
+function bus(b, s) {      // Delay und Hall des Presets, je Ball und Preset einmal
+  const schluessel = `${b.id}:${zu.palette}:${b.klang}`;
+  if (busse.has(schluessel)) return busse.get(schluessel);
+  const ein = ctx.createGain(), aus = ctx.createGain();
+  aus.gain.value = Math.pow(s.volume, 2) * 0.9;
+  ein.connect(aus);
+  const eintrag = { ein, aus, rueck: null };
+  if (s.delay_on) {
+    let zeit = s.delay_sync === 0 ? 1 / Math.pow(2, s.delay_frequency) : (60 / (s.beats_per_minute * 60)) * 4 * Math.pow(2, 5 - s.delay_tempo);
+    if (s.delay_sync === 2) zeit *= 1.5;
+    if (s.delay_sync === 3) zeit *= 2 / 3;
+    const d = ctx.createDelay(4), rueck = ctx.createGain(), nass = ctx.createGain();
+    d.delayTime.value = clamp(zeit, 0.01, 3.9); rueck.gain.value = clamp(s.delay_feedback, -0.95, 0.95); nass.gain.value = s.delay_dry_wet;
+    ein.connect(d); d.connect(rueck); rueck.connect(d); d.connect(nass); nass.connect(aus);
+    eintrag.rueck = rueck;
+  }
+  if (s.reverb_on) {
+    const laenge = 0.8 + ((s.reverb_feedback - 0.8) / 0.2) * 5;
+    const n = Math.floor(ctx.sampleRate * laenge), ir = ctx.createBuffer(2, n, ctx.sampleRate);
+    for (let c = 0; c < 2; c++) { const k = ir.getChannelData(c); for (let i = 0; i < n; i++) k[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 4); }
+    const hall = ctx.createConvolver(), daempf = ctx.createBiquadFilter(), nass = ctx.createGain();
+    hall.buffer = ir; daempf.type = "lowpass"; daempf.frequency.value = 500 + 15000 * Math.pow(1 - s.reverb_damping, 2);
+    nass.gain.value = s.reverb_dry_wet;
+    ein.connect(hall); hall.connect(daempf); daempf.connect(nass); nass.connect(aus);
+  }
+  aus.connect(zug(b).eingang);
+  busse.set(schluessel, eintrag);
+  return eintrag;
 }
 
-function biege(z, cent) {
-  z.bend = cent;
-  const t = ctx.currentTime;
-  z.stimmen.forEach((s) => s.oszis.forEach((o) => o.detune.setTargetAtTime(cent + o._det, t, 0.03)));
+const SCHRITT = 0.01;
+function huelle(t, a, d, su, r, aus) {
+  const wert = (x) => (x < a ? (a > 0 ? x / a : 1) : su + (1 - su) * Math.exp(-(x - a) / Math.max(0.001, d / 4)));
+  if (t < aus) return wert(t);
+  return wert(aus) * Math.exp(-(t - aus) / Math.max(0.001, r / 4));
 }
-
 function frequenz(n) { return 440 * Math.pow(2, (n - 69) / 12); }
 
-// modus: "schlag" (kurz), "ton" (mittel), "halten" (bis stop())
-function stimme(b, note, vel, modus) {
+// Eine Note des Presets. modus: "schlag" (kurz), "ton" (mittel), "halten" (bis stop()).
+function stimme(b, midi, vel, modus) {
   if (!ctx || !tonAn) return null;
-  const z = zug(b), t = ctx.currentTime, f = frequenz(note);
-  const pegel = Math.pow(vel / 127, 1.6) * 0.42;
-  const aus = ctx.createGain(); aus.gain.value = 0; aus.connect(z.eingang);
-  const oszis = [], quellen = [];
-  const oszi = (typ, fr, det = 0) => {
-    const o = ctx.createOscillator(); o.type = typ; o.frequency.value = fr;
-    o._det = det; o.detune.value = z.bend + det; z.lfoTiefe.connect(o.detune);
-    oszis.push(o); quellen.push(o); return o;
-  };
-  const rauschen = () => { const q = ctx.createBufferSource(); q.buffer = rauschPuffer; q.loop = true; quellen.push(q); return q; };
-  let anschlag = 0.005, ausklang = 0.35, verfall = null;
-
-  switch (b.klang) {
-    case "pad": {
-      const lp = ctx.createBiquadFilter(); lp.frequency.value = f * 6;
-      oszi("sawtooth", f, -8).connect(lp); oszi("sawtooth", f, 8).connect(lp); oszi("triangle", f / 2).connect(lp);
-      lp.connect(aus);
-      anschlag = modus === "schlag" ? 0.01 : 0.14; ausklang = modus === "schlag" ? 0.4 : 1.0;
-      break;
+  const preset = presetVon(b), s = Object.assign({}, STD, preset.settings), z = zug(b), t0 = ctx.currentTime + 0.005;
+  const sq = (v) => v * v, staerke = vel / 127, rad = z.modrad, bend = z.bend;
+  const dauer = modus === "schlag" ? 0.1 : modus === "ton" ? 0.5 : 4;
+  const A = [sq(s.amp_attack), sq(s.amp_decay), s.amp_sustain, sq(s.amp_release)];
+  const F = [sq(s.fil_attack), sq(s.fil_decay), s.fil_sustain, sq(s.fil_release)];
+  const M = [sq(s.mod_attack), sq(s.mod_decay), s.mod_sustain, sq(s.mod_release)];
+  const ende = dauer + A[3] * 1.4 + 0.05, n = Math.ceil(ende / SCHRITT) + 1;
+  const mods = s.modulations || [], zufall = Math.random();
+  const ziele = ["cutoff", "osc_1_transpose", "osc_2_transpose", "osc_1_tune", "osc_2_tune", "noise_volume", "osc_1_volume", "osc_2_volume", "sub_volume", "cross_modulation", "resonance"];
+  const kurve = {}; ziele.forEach((k) => { kurve[k] = new Float32Array(n); });
+  const amp = new Float32Array(n);
+  const ampFaktor = s.velocity_track >= 0 ? 1 - s.velocity_track + s.velocity_track * staerke : 1 + s.velocity_track * staerke;
+  let phase = 0, sh = Math.random() * 2 - 1, zyklus = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i * SCHRITT;
+    const q = { mod_wheel: rad, velocity: staerke, random: zufall, note: (midi - 60) / 64,
+      mod_envelope: huelle(t, M[0], M[1], M[2], M[3], dauer), fil_envelope: huelle(t, F[0], F[1], F[2], F[3], dauer),
+      amp_envelope: huelle(t, A[0], A[1], A[2], A[3], dauer) };
+    let lfoHz = s.mono_lfo_1_frequency, lfoAmp = s.mono_lfo_1_amplitude;
+    for (const m of mods) {
+      if (m.destination === "mono_lfo_1_frequency" && m.source in q) lfoHz += m.amount * q[m.source];
+      if (m.destination === "mono_lfo_1_amplitude" && m.source in q) lfoAmp += m.amount * q[m.source];
     }
-    case "pluck": {
-      const lp = ctx.createBiquadFilter(); lp.Q.value = 3;
-      lp.frequency.setValueAtTime(Math.min(16000, f * 12), t); lp.frequency.exponentialRampToValueAtTime(f * 1.3, t + 0.4);
-      oszi("sawtooth", f).connect(lp); oszi("square", f, 5).connect(lp); lp.connect(aus);
-      anschlag = 0.002; verfall = 0.9; ausklang = 0.25;
-      break;
+    phase += Math.pow(2, clamp(lfoHz, -7, 6)) * SCHRITT;
+    if (Math.floor(phase) !== zyklus) { zyklus = Math.floor(phase); sh = Math.random() * 2 - 1; }
+    const p = phase % 1;
+    let lfo = [Math.sin(2 * Math.PI * p), 1 - 4 * Math.abs(p - 0.5), p < 0.5 ? 1 : -1, 2 * p - 1, 1 - 2 * p][s.mono_lfo_1_waveform];
+    q.mono_lfo_1 = (lfo === undefined ? sh : lfo) * clamp(lfoAmp, -1, 1);
+    for (const k of ziele) {
+      let v = s[k];
+      if (k === "cutoff") v += s.keytrack * (midi - 60) + s.fil_env_depth * q.fil_envelope;
+      for (const m of mods) if (m.destination === k && m.source in q) v += m.amount * q[m.source];
+      kurve[k][i] = clamp(v, BEREICH[k][0], BEREICH[k][1]);
     }
-    case "bass": {
-      const lp = ctx.createBiquadFilter(); lp.frequency.value = f * 4;
-      oszi("sine", f).connect(aus); oszi("square", f).connect(lp); lp.connect(aus);
-      anschlag = 0.006; ausklang = 0.3;
-      break;
-    }
-    case "glocke": {
-      const mod = ctx.createOscillator(), modPegel = ctx.createGain();
-      mod.frequency.value = f * 3.5; modPegel.gain.setValueAtTime(f * 2.5, t); modPegel.gain.exponentialRampToValueAtTime(f * 0.1, t + 1.2);
-      const traeger = oszi("sine", f); mod.connect(modPegel); modPegel.connect(traeger.frequency); quellen.push(mod);
-      traeger.connect(aus);
-      anschlag = 0.002; verfall = 2.0; ausklang = 0.6;
-      break;
-    }
-    case "perkussion": {
-      const o = oszi("sine", f);
-      o.frequency.setValueAtTime(f * 2.6, t); o.frequency.exponentialRampToValueAtTime(f, t + 0.07);
-      o.connect(aus);
-      const r = rauschen(), hp = ctx.createBiquadFilter(), rp = ctx.createGain();
-      hp.type = "highpass"; hp.frequency.value = 2500;
-      rp.gain.setValueAtTime(0.5, t); rp.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
-      r.connect(hp); hp.connect(rp); rp.connect(aus);
-      anschlag = 0.001; verfall = 0.45; ausklang = 0.2;
-      break;
-    }
-    case "rauschen":
-    default: {
-      const r = rauschen(), bp = ctx.createBiquadFilter(), plus = ctx.createGain();
-      bp.type = "bandpass"; bp.frequency.value = f; bp.Q.value = 9; plus.gain.value = 5;
-      r.connect(bp); bp.connect(plus); plus.connect(aus);
-      anschlag = 0.01; ausklang = 0.45;
+    amp[i] = q.amp_envelope * ampFaktor;
+  }
+  let drive = s.distortion_drive, rueck = s.delay_feedback;
+  for (const m of mods) {
+    if (m.source === "mod_wheel" && m.destination === "distortion_drive") drive += m.amount * rad;
+    if (m.source === "mod_wheel" && m.destination === "delay_feedback") rueck += m.amount * rad;
+  }
+  const fx = bus(b, s);
+  if (fx.rueck) fx.rueck.gain.setTargetAtTime(clamp(rueck, -0.95, 0.95), t0, 0.05);
+  const huell = ctx.createGain(), tor = ctx.createGain(), mix = ctx.createGain();
+  huell.gain.value = 0;
+  let kette = mix;
+  if (s.filter_on) {
+    const stufen = s.filter_style === 1 ? 2 : 1, typ = s.filter_blend < 0.5 ? "lowpass" : s.filter_blend < 1.5 ? "bandpass" : "highpass";
+    for (let k = 0; k < stufen; k++) {
+      const f = ctx.createBiquadFilter(); f.type = typ;
+      f.frequency.setValueCurveAtTime(kurve.cutoff.map((c) => clamp(frequenz(c), 20, 18000)), t0, ende);
+      f.Q.setValueCurveAtTime(kurve.resonance.map((x) => (typ === "bandpass" ? 0.7 + x * x * 12 : 0.5 + x * x * (stufen === 2 ? 6 : 14))), t0, ende);
+      kette.connect(f); kette = f;
     }
   }
-
-  const g = aus.gain;
-  g.setValueAtTime(0, t); g.linearRampToValueAtTime(pegel, t + anschlag);
-  let ende = null;
-  if (verfall) {
-    const d = modus === "schlag" ? Math.min(verfall, 0.35) : verfall;
-    g.setTargetAtTime(0, t + anschlag, d / 4); ende = t + anschlag + d * 1.6;
-  } else if (modus === "halten") {
-    g.setTargetAtTime(pegel * 0.75, t + anschlag, 0.15);
-  } else {
-    const halte = modus === "schlag" ? 0.03 : 0.35;
-    g.setTargetAtTime(0, t + anschlag + halte, ausklang / 4); ende = t + anschlag + halte + ausklang * 1.6;
+  if (s.distortion_on) {
+    const ws = ctx.createWaveShaper(), trocken = ctx.createGain(), nass = ctx.createGain(), summe = ctx.createGain();
+    ws.curve = verzerrKurve(s.distortion_type, clamp(drive, -30, 30)); ws.oversample = "2x";
+    nass.gain.value = s.distortion_mix * 0.6; trocken.gain.value = 1 - s.distortion_mix;
+    kette.connect(ws); ws.connect(nass); nass.connect(summe); kette.connect(trocken); trocken.connect(summe);
+    kette = summe;
   }
-  quellen.forEach((q) => q.start(t));
-  const s = { oszis, quellen, beendet: false };
-  const beenden = (wann) => {
-    if (s.beendet) return; s.beendet = true;
-    quellen.forEach((q) => { try { q.stop(wann); } catch (e) { /* schon gestoppt */ } });
-    quellen[0].onended = () => {
-      z.stimmen.delete(s);
-      oszis.forEach((o) => { try { z.lfoTiefe.disconnect(o.detune); } catch (e) { /* schon getrennt */ } });
-      aus.disconnect();
-    };
+  kette.connect(huell); huell.connect(tor); tor.connect(fx.ein);
+  huell.gain.setValueCurveAtTime(amp.map((x) => x * 0.35), t0, ende);
+
+  const knoten = [], freq = frequenz(midi);
+  const oszi = (nr) => {
+    const p = `osc_${nr}_`, anzahl = Math.min(5, s[p + "unison_voices"]), g = ctx.createGain(), eigene = [];
+    g.gain.setValueCurveAtTime(kurve[p + "volume"].map((v) => (v * v) / Math.sqrt(anzahl)), t0, ende);
+    for (let u = 0; u < anzahl; u++) {
+      const o = ctx.createOscillator(); welle(o, s[p + "waveform"]); o.frequency.value = freq;
+      const streu = anzahl > 1 ? (u / (anzahl - 1) - 0.5) * 2 * s[p + "unison_detune"] : 0;
+      o.detune.setValueCurveAtTime(kurve[p + "transpose"].map((tr, i) => tr * 100 + kurve[p + "tune"][i] * 100 + streu + bend), t0, ende);
+      o.connect(g); eigene.push(o); knoten.push(o);
+    }
+    g.connect(mix);
+    return eigene;
   };
-  s.stop = () => {
-    const t2 = ctx.currentTime;
-    g.cancelScheduledValues(t2); g.setValueAtTime(g.value, t2); g.setTargetAtTime(0, t2, ausklang / 4);
-    beenden(t2 + ausklang * 1.6);
+  const o1 = oszi(1), o2 = oszi(2);
+  if (s.cross_modulation > 0 || mods.some((m) => m.destination === "cross_modulation")) {
+    for (const [von, nach] of [[o2[0], o1], [o1[0], o2]]) {
+      const tiefe = ctx.createGain();
+      tiefe.gain.setValueCurveAtTime(kurve.cross_modulation.map((c) => c * freq * 2), t0, ende);
+      von.connect(tiefe); nach.forEach((o) => tiefe.connect(o.frequency));
+    }
+  }
+  if (s.sub_volume > 0) {
+    const o = ctx.createOscillator(), g = ctx.createGain(); welle(o, s.sub_waveform);
+    o.frequency.value = freq / (s.sub_octave ? 4 : 2);
+    o.detune.setValueCurveAtTime(kurve.osc_1_transpose.map((tr) => tr * 100 + bend), t0, ende);
+    g.gain.setValueCurveAtTime(kurve.sub_volume.map((v) => v * v), t0, ende);
+    o.connect(g); g.connect(mix); knoten.push(o);
+  }
+  if (s.noise_volume > 0 || mods.some((m) => m.destination === "noise_volume")) {
+    const q = ctx.createBufferSource(), g = ctx.createGain(); q.buffer = rauschPuffer; q.loop = true;
+    g.gain.setValueCurveAtTime(kurve.noise_volume.map((v) => v * v * 0.8), t0, ende);
+    q.connect(g); g.connect(mix); q.loopStart = Math.random(); knoten.push(q);
+  }
+  const st = { beendet: false };
+  const aufraeumen = () => { z.stimmen.delete(st); tor.disconnect(); };
+  knoten.forEach((k) => { k.start(t0); k.stop(t0 + ende); });
+  knoten[0].onended = aufraeumen;
+  st.stop = () => {     // Note aus: Ausklang mit der Release-Zeit des Presets
+    if (st.beendet) return; st.beendet = true;
+    const t = ctx.currentTime;
+    tor.gain.setTargetAtTime(0, t, Math.max(0.01, A[3] / 4));
+    knoten.forEach((k) => { try { k.stop(t + A[3] * 1.4 + 0.05); } catch (e) { /* schon aus */ } });
   };
-  if (ende) beenden(ende);
-  z.stimmen.add(s);
-  if (z.stimmen.size > 12) { const aelteste = z.stimmen.values().next().value; aelteste.stop(); }
-  return s;
+  z.stimmen.add(st);
+  if (z.stimmen.size > 12) z.stimmen.values().next().value.stop();
+  return st;
+}
+
+// Kanalzug: was weder Drehung, Bewegung noch Position steuert, steht auf einem festen Wert
+function grundwerte(b) {
+  if (!ctx || !zuege[b.id]) return;
+  steuern(b, letzteQuellen[b.id] || {});
 }
 
 // ---------------------------------------------------------------------------
@@ -483,7 +607,7 @@ function stufe(b, aktion, e) {
 }
 function skalenton(b, st, okt) {
   const sk = skala(), o = Math.floor(st / sk.length), r = st % sk.length;
-  return clamp(zu.grundton + 12 * ((b.oktave || 0) + okt + o) + sk[r], 0, 127);
+  return clamp(zu.grundton + harmonie + 12 * ((b.oktave || 0) + okt + o) + sk[r], 0, 127);
 }
 function fuerId(id) {
   const aktive = zu.baelle.filter((b) => b.aktiv !== false);
@@ -499,7 +623,7 @@ function ereignis(e) {
   }
   const aktion = b.aktionen[e.art] || {}, funktion = aktion.funktion || "nichts";
   if (e.art === "ruhe") {
-    if (funktion === "stille" && ctx && zuege[b.id]) { zuege[b.id].stimmen.forEach((s) => s.stop()); folge = "alles verstummt"; }
+    if (funktion === "stille" && ctx && zuege[b.id]) { [...zuege[b.id].stimmen].forEach((s) => s.stop()); folge = "alles verstummt"; }
   } else if (funktion !== "nichts") {
     const st = stufe(b, aktion, e), okt = aktion.oktave || 0;
     const noten = funktion === "akkord" ? [0, 2, 4].map((i) => skalenton(b, st + i, okt)) : [skalenton(b, st, okt)];
@@ -520,25 +644,37 @@ function fortlaufend(id, werte) {
   const b = fuerId(id);
   if (!b) return;
   zeigeMesser(b.id, werte);
+  letzteQuellen[b.id] = werte;
   if (!ctx || !tonAn) return;
-  const z = zug(b), t = ctx.currentTime;
-  for (const [groesse] of FORTLAUFEND) {
-    const w = clamp(werte[groesse] || 0, 0, 1);
-    switch (b.aktionen[groesse]?.funktion) {
-      case "filter": z.filter.frequency.setTargetAtTime(180 * Math.pow(45, w), t, 0.05); break;
-      case "lautstaerke": z.vol.gain.setTargetAtTime(0.08 + 0.92 * w, t, 0.05); break;
-      case "hall": z.hall.gain.setTargetAtTime(w * 0.95, t, 0.08); break;
-      case "vibrato": z.lfoTiefe.gain.setTargetAtTime(w * 70, t, 0.05); break;
-      case "verzerrung": setzeDrive(z, w); break;
-      case "tonhoehe": if (Math.abs(z.bend - w * 1200) > 8) biege(z, w * 1200); break;
-    }
+  steuern(b, werte);
+}
+
+// Drehung, Bewegung und Position steuern den Kanalzug. Mehrere Quellen auf demselben Ziel werden gemittelt.
+function steuern(b, q) {
+  const z = zug(b), t = ctx.currentTime, ziel = {};
+  const dazu = (f, w) => { if (f && f !== "nichts" && w != null) (ziel[f] = ziel[f] || []).push(clamp(w, 0, 1)); };
+  for (const [k] of [...FORTLAUFEND, ...POSITION]) dazu(b.aktionen[k]?.funktion, q[k]);
+  const ab = zu.raum?.abstand || "nichts", spreizung = raumWerte.spreizung;
+  if (ab !== "nichts" && spreizung != null) dazu(ab, ab === "hall" ? spreizung : 1 - spreizung);
+  const mittel = (f) => (ziel[f] ? ziel[f].reduce((x, y) => x + y, 0) / ziel[f].length : null);
+  const w = {};
+  for (const f of ["filter", "lautstaerke", "hall", "verzerrung", "tonhoehe", "vibrato", "panorama"]) w[f] = mittel(f);
+  z.filter.frequency.setTargetAtTime(w.filter == null ? 18000 : 500 * Math.pow(36, w.filter), t, 0.05);   // 500 Hz bis offen
+  z.vol.gain.setTargetAtTime(w.lautstaerke == null ? 0.85 : 0.3 + 0.7 * w.lautstaerke, t, 0.05);   // nie ganz stumm
+  z.hall.gain.setTargetAtTime(w.hall == null ? 0.06 : w.hall * 0.9, t, 0.08);
+  setzeDrive(z, w.verzerrung ?? 0);
+  z.bend = w.tonhoehe == null ? 0 : w.tonhoehe * 1200;
+  z.modrad = w.vibrato ?? 0;
+  if (z.pan.pan) {
+    const ruhe = clamp((zu.baelle.indexOf(b) - (zu.baelle.length - 1) / 2) * 0.35, -0.7, 0.7);
+    z.pan.pan.setTargetAtTime(w.panorama == null ? ruhe : w.panorama * 1.8 - 0.9, t, 0.05);
   }
 }
 
 // ---------------------------------------------------------------------------
 // Anzeige: Protokoll, Aufblitzen, Messer
 // ---------------------------------------------------------------------------
-const ARTNAMEN = { abflug: "Abflug", landung: "Landung", stoss: "Stoß", ruhe: "Ruhe" };
+const ARTNAMEN = { abflug: "Abflug", landung: "Landung", stoss: "Stoß", ruhe: "Ruhe", zone: "neue Bodenzone" };
 const startZeit = performance.now();
 function protokolliere(b, e, folge) {
   const liste = $("#protokoll");
@@ -567,6 +703,10 @@ function zeigeMesser(id, w) {
   if (!karte) return;
   karte.querySelector(".m-bewegung").style.width = `${Math.round(clamp(w.bewegung, 0, 1) * 100)}%`;
   karte.querySelector(".m-drehung").style.width = `${Math.round(clamp(w.drehung, 0, 1) * 100)}%`;
+  if (w.x != null) {
+    const ort = karte.querySelector("[data-ort]"), t = `x ${komma(w.x * RAUM_B, 1)} m · y ${komma(w.y * RAUM_T, 1)} m · Höhe ${komma(w.pos_z * 3, 1)} m`;
+    if (ort.textContent !== t) ort.textContent = t;
+  }
   const z = karte.querySelector(".zustand");
   const text = { ruhe: "liegt", bewegt: "bewegt", flug: "fliegt", gehalten: "in der Hand", rollen: "rollt" }[w.zustand] || w.zustand;
   if (z.textContent !== text) { z.textContent = text; z.classList.toggle("flug", w.zustand === "flug"); }
@@ -620,13 +760,17 @@ function ballKarte(b) {
     </div>
     <div class="zeilen gruppe">
       <span class="etikett">Fortlaufend</span>
+    </div>
+    <div class="zeilen gruppe">
+      <span class="etikett">Position im Raum</span>
+      <span class="ort daten" data-ort>–</span>
     </div>`;
   k.querySelector(`#${p}-name`).value = b.name;
   optionen(k.querySelector(`#${p}-typ`), Object.fromEntries(Object.entries(TYPEN).map(([t, v]) => [t, v.name])), b.typ);
-  optionen(k.querySelector(`#${p}-klang`), KLAENGE, b.klang);
+  optionen(k.querySelector(`#${p}-klang`), palette().presets.map((x) => [x.name, `${x.name}: ${x.beschreibung.split(":")[0]}`]), b.klang);
   optionen(k.querySelector(`#${p}-oktave`), OKTAVEN, b.oktave || 0);
 
-  const [ausl, fort] = k.querySelectorAll(".zeilen");
+  const [ausl, fort, ort] = k.querySelectorAll(".zeilen");
   for (const [art, titel, info] of AUSLOESER) {
     const a = b.aktionen[art] || (b.aktionen[art] = { funktion: "nichts" });
     const z = document.createElement("div");
@@ -651,6 +795,14 @@ function ballKarte(b) {
     optionen(z.querySelector("select"), F_FORTLAUFEND, a.funktion);
     fort.append(z);
   }
+  for (const [art, titel, info] of POSITION) {
+    const a = b.aktionen[art] || (b.aktionen[art] = { funktion: "nichts" });
+    const z = document.createElement("div");
+    z.className = "zeile stetig"; z.dataset.ball = b.id; z.dataset.art = art;
+    z.innerHTML = `<span class="was"><b>${titel}</b><small>${info}</small></span><select id="${p}-${art}-f" aria-label="${titel}: steuert"></select>`;
+    optionen(z.querySelector("select"), F_FORTLAUFEND, a.funktion);
+    ort.append(z);
+  }
   sperren(k, b);
 
   k.addEventListener("input", (ev) => {
@@ -663,19 +815,19 @@ function ballKarte(b) {
   });
   k.addEventListener("change", (ev) => {
     const id = ev.target.id;
-    if (id === `${p}-typ`) b.typ = ev.target.value;
-    else if (id === `${p}-klang`) b.klang = ev.target.value;
+    if (id === `${p}-typ`) { b.typ = ev.target.value; if (sim[b.id]) sim[b.id].typNeu = true; }
+    else if (id === `${p}-klang`) { b.klang = ev.target.value; vorspielen(b); }
     else if (id === `${p}-oktave`) b.oktave = parseInt(ev.target.value, 10);
     else if (id === `${p}-aktiv`) { b.aktiv = ev.target.checked; k.classList.toggle("aus", !b.aktiv); }
     else {
-      const m = id.match(new RegExp(`^${p}-(\\w+)-([fto])$`));
+      const m = id.match(new RegExp(`^${p}-(\\w+?)-([fto])$`));
       if (!m) return;
       const a = b.aktionen[m[1]];
       if (m[2] === "f") a.funktion = ev.target.value;
       if (m[2] === "t") a.tonhoehe = ev.target.value;
       if (m[2] === "o") a.oktave = parseInt(ev.target.value, 10);
       sperren(k, b);
-      if (FORTLAUFEND.some(([x]) => x === m[1])) grundwerte(b);
+      if ([...FORTLAUFEND, ...POSITION].some(([x]) => x === m[1])) grundwerte(b);
     }
     geaendert();
   });
@@ -724,16 +876,25 @@ function uebernimm(z, quelle) {
   for (const b of z.baelle) {
     b.typ = TYPEN[b.typ] ? b.typ : "softball";
     b.aktionen = { ...aktionenAusTyp(b.typ), ...(b.aktionen || {}) };
-    b.farbe = b.farbe || TYPEN[b.typ].farbe; b.klang = b.klang || TYPEN[b.typ].klang; b.name = b.name || TYPEN[b.typ].name;
+    b.farbe = b.farbe || TYPEN[b.typ].farbe; b.name = b.name || TYPEN[b.typ].name;
+    if (!PAL[0].presets.some((x) => x.name === b.klang)) b.klang = TYPEN[b.typ].klang;
   }
   zu = z;
   zu.grundton = zu.grundton ?? 48; zu.skala = SKALEN[zu.skala] ? zu.skala : "moll_pentatonik";
+  if (!PAL.some((p) => p.name === zu.palette)) zu.palette = PAL[0].name;
+  zu.raum = Object.assign({ zonen: "aus", abstand: "nichts" }, zu.raum || {});
+  harmonie = 0;
+  $("#palette").value = zu.palette; $("#raum-zonen").value = zu.raum.zonen; $("#raum-abstand").value = zu.raum.abstand;
   for (const id of Object.keys(sim)) if (!ballVon(+id)) delete sim[id];
   gewaehlt = zu.baelle[0]?.id ?? null;
   $("#grundton").value = String(zu.grundton); $("#skala").value = zu.skala;
   zeichneZuordnung();
   zu.baelle.forEach(grundwerte);
   if (quelle !== "server") geaendert();
+}
+function vorspielen(b) {      // kurzer Probeton, wenn sich der Klang ändert
+  audioStart();
+  if (tonAn) stimme(b, skalenton(b, 0, 0), 100, "ton");
 }
 
 // ---------------------------------------------------------------------------
@@ -756,6 +917,16 @@ function simBall(b) {
 function sende(b, art, daten = {}) {
   const s = sim[b.id];
   ereignis({ typ: "ereignis", ball: b.id, art, x: s ? s.x / RAUM_B : null, ...daten });
+}
+
+// Bodenzonen: 2 × 2 Felder, jedes verschiebt die Harmonie
+function zoneVon(s) { return (s.x < RAUM_B / 2 ? 0 : 1) + (s.y < RAUM_T / 2 ? 0 : 2); }
+function zoneWechseln(b, s) {
+  if (zu.raum?.zonen !== "akkorde" || b.aktiv === false) return;
+  const neu = ZONEN_VERSATZ.at(zoneVon(s));
+  if (neu === harmonie) return;
+  harmonie = neu;
+  protokolliere(b, { art: "zone" }, `Harmonie ${NOTENNAMEN[(zu.grundton + harmonie) % 12]}`);
 }
 
 function abflug(b, s, vx, vy, vz, fang = null) {
@@ -791,7 +962,9 @@ function schritt_sim(dt) {
     if (s.zustand === "gehalten") {
       // folgt dem Zeiger, z = Handhöhe
     } else if (s.zustand === "flug") {
-      s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt; s.vz -= G * dt;
+      if (typ.luft) { const bremse = Math.exp(-typ.luft * dt); s.vx *= bremse; s.vy *= bremse; s.vz = s.vz * bremse - G * dt * (1 - Math.min(0.85, typ.luft * 0.3)); }
+      else s.vz -= G * dt;
+      s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
       for (const [k, v, max] of [["x", "vx", RAUM_B], ["y", "vy", RAUM_T]]) {
         if (s[k] < r || s[k] > max - r) {   // Wand im Flug: der Sensor sieht Landung + neuen Abflug
           s[k] = clamp(s[k], r, max - r); s[v] *= -0.6;
@@ -801,7 +974,7 @@ function schritt_sim(dt) {
       if (s.fang != null && s.vz < 0 && s.z <= s.fang) {
         s.z = s.fang; landung(b, s); s.zustand = "gehalten"; s.halten = 0.7; s.vx = s.vy = 0;
       } else if (s.z <= 0) {
-        s.z = 0; landung(b, s);
+        s.z = 0; zoneWechseln(b, s); landung(b, s);
         const vz = -s.vz * typ.sprung;
         s.vx *= 0.75; s.vy *= 0.75;
         if (vz > 1.1) { s.vz = vz; s.abflugT = jetzt; sende(b, "abflug"); }
@@ -826,7 +999,7 @@ function schritt_sim(dt) {
       }
       if (rollTempo < 0.03 && s.schuetteln <= 0) {
         s.vx = s.vy = 0; s.still += dt;
-        if (s.still > 0.5 && !s.ruheGemeldet) { s.ruheGemeldet = true; s.zustand = "ruhe"; sende(b, "ruhe"); }
+        if (s.still > 0.5 && !s.ruheGemeldet) { s.ruheGemeldet = true; s.zustand = "ruhe"; zoneWechseln(b, s); sende(b, "ruhe"); }
       } else s.still = 0;
     }
     if (s.zustand === "gehalten" && s.hand == null && s.halten > 0) {
@@ -888,7 +1061,32 @@ function zeichne() {
     stift.fillRect(px(m) - 0.75, py(RAUM_T) + 2, 1.5, 5);
     stift.fillText(`${m}`, px(m) - 3, py(RAUM_T) + 9 > ph - 14 ? py(RAUM_T) - 16 : py(RAUM_T) + 9);
   }
-  stift.textAlign = "right"; stift.fillText("8 × 6 m", px(RAUM_B) - 6, py(0) + 6); stift.textAlign = "left";
+  if (zu.raum?.zonen === "akkorde") {
+    const aktiv = ZONEN_VERSATZ.indexOf(harmonie);
+    for (let i = 0; i < 4; i++) {
+      const x0 = (i % 2) * RAUM_B / 2, y0 = Math.floor(i / 2) * RAUM_T / 2;
+      stift.fillStyle = i === aktiv ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.03)";
+      stift.fillRect(px(x0), py(y0), (RAUM_B / 2) * massstab, (RAUM_T / 2) * massstab);
+      stift.fillStyle = farben["feld-schrift"]; stift.textAlign = "center";
+      stift.font = `600 ${Math.max(12, pw / 40)}px Atkinson Hyperlegible, sans-serif`;
+      stift.fillText(NOTENNAMEN[(zu.grundton + ZONEN_VERSATZ.at(i)) % 12], px(x0 + RAUM_B / 4), py(y0 + RAUM_T / 4) - 8);
+    }
+    stift.beginPath(); stift.moveTo(px(0), py(RAUM_T / 2)); stift.lineTo(px(RAUM_B), py(RAUM_T / 2)); stift.stroke();
+    stift.font = `500 ${Math.max(10, pw / 60)}px JetBrains Mono, monospace`; stift.textAlign = "left";
+  }
+  stift.textAlign = "right"; stift.fillStyle = farben["feld-schrift"]; stift.fillText("8 × 6 m", px(RAUM_B) - 6, py(0) + 6); stift.textAlign = "left";
+  const aktive = zu.baelle.filter((x) => x.aktiv !== false).map((x) => simBall(x));
+  if ($("#raum-linien").checked && aktive.length > 1 && raumWerte.schwer) {
+    stift.strokeStyle = "rgba(255,255,255,0.35)"; stift.lineWidth = 1; stift.setLineDash([3, 5]);
+    for (let i = 0; i < aktive.length; i++) for (let j = i + 1; j < aktive.length; j++) {
+      stift.beginPath(); stift.moveTo(px(aktive[i].x), py(aktive[i].y)); stift.lineTo(px(aktive[j].x), py(aktive[j].y)); stift.stroke();
+    }
+    stift.setLineDash([]);
+    const sx = px(raumWerte.schwer.x), sy = py(raumWerte.schwer.y);
+    stift.strokeStyle = farben["feld-linie"]; stift.lineWidth = 2;
+    stift.beginPath(); stift.moveTo(sx - 7, sy); stift.lineTo(sx + 7, sy); stift.moveTo(sx, sy - 7); stift.lineTo(sx, sy + 7); stift.stroke();
+    stift.beginPath(); stift.arc(sx, sy, raumWerte.radius * massstab, 0, Math.PI * 2); stift.setLineDash([2, 6]); stift.stroke(); stift.setLineDash([]);
+  }
   if (live.an) stift.fillText("Der echte Ball steht in der Mitte", px(0) + 6, py(0) + 6);
 
   const reihen = zu.baelle.map((b) => [b, simBall(b)]).sort((a, c) => a[1].z - c[1].z);
@@ -931,6 +1129,12 @@ function zeichneBall(b, s, o) {
     case "wasserball":
       stift.fillStyle = "rgba(255,255,255,0.9)";
       for (let i = 0; i < 6; i += 2) { stift.beginPath(); stift.moveTo(0, 0); stift.arc(0, 0, r, (i * Math.PI) / 3, ((i + 1) * Math.PI) / 3); stift.fill(); }
+      break;
+    case "luftballon":
+      stift.fillStyle = "rgba(255,255,255,0.35)"; stift.beginPath(); stift.ellipse(-r * 0.3, -r * 0.35, r * 0.25, r * 0.4, -0.5, 0, Math.PI * 2); stift.fill(); break;
+    case "haarball":
+      stift.strokeStyle = "rgba(60,40,20,0.55)"; stift.lineWidth = Math.max(1, r * 0.06);
+      for (let i = 0; i < 26; i++) { const w = i * 0.97, d = r * (0.2 + ((i * 7) % 10) / 12); stift.beginPath(); stift.moveTo(Math.cos(w) * d * 0.6, Math.sin(w) * d * 0.6); stift.lineTo(Math.cos(w + 0.3) * d, Math.sin(w + 0.3) * d); stift.stroke(); }
       break;
     case "basketball":
       stift.strokeStyle = "rgba(0,0,0,0.5)";
@@ -1034,11 +1238,7 @@ async function liveVersuchen() {
     if (!b) return;
     const s = simBall(b);
     if (!s.liveWerte) { s.x = RAUM_B / 2; s.y = RAUM_T / 2; s.vx = s.vy = 0; s.zustand = "ruhe"; }
-    if (d.typ === "werte") {
-      s.liveWerte = d;
-      fortlaufend(b.id, d);
-      return;
-    }
+    if (d.typ === "werte") { s.liveWerte = d; return; }
     if (d.art === "abflug") { s.liveFlug = performance.now(); }
     if (d.art === "landung") { s.liveFlug = null; }
     ereignis({ ...d, live: true });
@@ -1065,12 +1265,43 @@ $("#grundton").value = String(zu.grundton);
 $("#grundton").addEventListener("change", (ev) => { zu.grundton = parseInt(ev.target.value, 10); geaendert(); });
 $("#skala").addEventListener("change", (ev) => { zu.skala = ev.target.value; for (const k in schritt) delete schritt[k]; geaendert(); });
 optionen($("#neu-typ"), Object.fromEntries(Object.entries(TYPEN).map(([t, v]) => [t, v.name])), "noppenball");
-$("#neu").addEventListener("click", () => {
-  if (zu.baelle.length >= 8) { melde("Mehr als 8 Bälle passen nicht gut ins Feld."); return; }
-  const id = Math.max(0, ...zu.baelle.map((b) => b.id)) + 1;
-  zu.baelle.push(neuerBall(id, $("#neu-typ").value));
+zu.raum = Object.assign({ zonen: "aus", abstand: "nichts" }, zu.raum || {});
+if (!PAL.some((p) => p.name === zu.palette)) zu.palette = PAL[0].name;
+for (const b of zu.baelle) {
+  if (!TYPEN[b.typ]) b.typ = "softball";
+  if (!PAL[0].presets.some((x) => x.name === b.klang)) b.klang = TYPEN[b.typ].klang;
+  for (const [k] of POSITION) if (!b.aktionen[k]) b.aktionen[k] = { funktion: TYPEN[b.typ].aktionen[k]?.[0] || "nichts" };
+}
+optionen($("#feld-typ"), Object.fromEntries(Object.entries(TYPEN).map(([t, v]) => [t, v.name])), "tennisball");
+function ballDazu(typ, x, y) {
+  if (zu.baelle.length >= 10) { melde("Mehr als 10 Bälle passen nicht gut ins Feld."); $("#feld-neu").textContent = "Feld ist voll"; setTimeout(() => { $("#feld-neu").textContent = "+ Ball"; }, 1800); return null; }
+  const id = Math.max(0, ...zu.baelle.map((b) => b.id)) + 1, b = neuerBall(id, typ);
+  b.kanal = clamp(id, 1, 16);
+  zu.baelle.push(b);
+  const s = simBall(b);
+  if (x != null) { s.x = clamp(x, 0.3, RAUM_B - 0.3); s.y = clamp(y, 0.3, RAUM_T - 0.3); }
+  else { s.x = 0.8 + Math.random() * (RAUM_B - 1.6); s.y = 0.8 + Math.random() * (RAUM_T - 1.6); }
   gewaehlt = id; zeichneZuordnung(); geaendert();
+  return b;
+}
+$("#neu").addEventListener("click", () => ballDazu($("#neu-typ").value));
+$("#feld-neu").addEventListener("click", () => { audioStart(); ballDazu($("#feld-typ").value); });
+feld.addEventListener("dblclick", (ev) => {
+  const p = feldPunkt(ev);
+  if (trifft(p)) return;
+  audioStart();
+  ballDazu($("#feld-typ").value, (p.x - RAND_X) / massstab, (p.y - RAND_Y()) / massstab);
 });
+optionen($("#palette"), PAL.map((p) => [p.name, p.name]), zu.palette);
+$("#palette").addEventListener("change", (ev) => {
+  zu.palette = ev.target.value;
+  zeichneZuordnung(); geaendert();
+  const b = ballVon(gewaehlt); if (b) vorspielen(b);
+});
+optionen($("#raum-zonen"), ZONEN, zu.raum?.zonen);
+optionen($("#raum-abstand"), ABSTAND, zu.raum?.abstand);
+$("#raum-zonen").addEventListener("change", (ev) => { zu.raum.zonen = ev.target.value; harmonie = 0; geaendert(); });
+$("#raum-abstand").addEventListener("change", (ev) => { zu.raum.abstand = ev.target.value; zu.baelle.forEach(grundwerte); geaendert(); });
 function melde(text) { $("#meldung").textContent = text; setTimeout(() => { if ($("#meldung").textContent === text) $("#meldung").textContent = ""; }, 3500); }
 $("#kopieren").addEventListener("click", () => {
   const t = $("#json"); t.value = JSON.stringify(zu, null, 2);
@@ -1098,6 +1329,19 @@ new ResizeObserver(() => groesse()).observe(feld);
 zeichneZuordnung();
 zeigeTon();
 
+const raumWerte = { schwer: null, radius: 0, spreizung: null };
+function raumBerechnen() {
+  const aktive = zu.baelle.filter((x) => x.aktiv !== false).map((x) => simBall(x));
+  $("#rw-anzahl").textContent = String(aktive.length);
+  $("#rw-harmonie").textContent = zu.raum?.zonen === "akkorde" ? NOTENNAMEN[(zu.grundton + harmonie) % 12] : "fest";
+  if (aktive.length < 2) { raumWerte.schwer = null; raumWerte.spreizung = null; $("#rw-schwer").textContent = "–"; $("#rw-ausbreitung").textContent = "–"; return; }
+  const sx = aktive.reduce((a, s) => a + s.x, 0) / aktive.length, sy = aktive.reduce((a, s) => a + s.y, 0) / aktive.length;
+  const radius = aktive.reduce((a, s) => a + Math.hypot(s.x - sx, s.y - sy), 0) / aktive.length;
+  raumWerte.schwer = { x: sx, y: sy }; raumWerte.radius = radius; raumWerte.spreizung = clamp(radius / 3, 0, 1);
+  $("#rw-schwer").textContent = `${komma(sx, 1)} / ${komma(sy, 1)} m`;
+  $("#rw-ausbreitung").textContent = `${komma(radius, 1)} m`;
+}
+
 let letzteZeit = performance.now(), letzteWerte = 0;
 function schleife(t) {
   const dt = Math.min(0.05, (t - letzteZeit) / 1000); letzteZeit = t; jetzt += dt;
@@ -1109,9 +1353,11 @@ function schleife(t) {
   }
   if (t - letzteWerte > 33) {
     letzteWerte = t;
+    raumBerechnen();
     for (const b of zu.baelle) {
-      const s = simBall(b);
-      if (!s.liveWerte) fortlaufend(b.id, { bewegung: s.bewegung, drehung: s.drehung, zustand: s.zustand });
+      const s = simBall(b), ort = { x: s.x / RAUM_B, y: s.y / RAUM_T, pos_x: s.x / RAUM_B, pos_y: s.y / RAUM_T, pos_z: clamp(s.z / 3, 0, 1) };
+      if (!s.liveWerte) fortlaufend(b.id, { bewegung: s.bewegung, drehung: s.drehung, zustand: s.zustand, ...ort });
+      else fortlaufend(b.id, { ...s.liveWerte, ...ort });
     }
   }
   zeichne();

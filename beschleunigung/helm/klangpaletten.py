@@ -403,6 +403,10 @@ def main():
     daten = json.dumps({"standard": standard, "paletten": vorschau}, ensure_ascii=False, separators=(",", ":"))
     with open(os.path.join(HIER, "paletten.html"), "w", encoding="utf-8") as f:
         f.write(seite.replace("/*DATEN*/null", daten.replace("</", "<\\/")))
+    with open(os.path.join(HIER, "zuordnung_vorlage.html"), encoding="utf-8") as f:
+        zuordnung = f.read()
+    with open(os.path.join(HIER, "..", "zuordnung.html"), "w", encoding="utf-8") as f:
+        f.write(zuordnung.replace("/*DATEN*/null", daten.replace("</", "<\\/")))
     print(f"{sum(len(p['presets']) for p in PALETTEN)} Presets → {ordner}")
     print(f"Bank → {bank}")
 
