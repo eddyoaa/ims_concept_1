@@ -1,0 +1,4 @@
+opencv-python
+numpy
+# nur für realtime_ball_tracking.py (YOLO):
+# ultralytics

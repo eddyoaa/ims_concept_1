@@ -2,3 +2,7 @@ models/
 __pycache__/
 *.pyc
 .venv/
+
+# ball_tracking
+ball_tracking/*.pt
+ball_tracking/camera_*.jpg
