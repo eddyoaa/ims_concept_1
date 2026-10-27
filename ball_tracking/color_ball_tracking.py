@@ -30,6 +30,13 @@
 #       while moving slowly (held in a hand), its position is kept for a
 #       while ("hidden") instead of being dropped.
 #
+# Sound (ball_sound.py), exactly two notes:
+#   ball moves right (x grows)   -> G4      speed -> volume (still ball = silent)
+#   ball moves left  (x shrinks) -> A4      y     -> low-pass filter (top bright, bottom dull)
+#   x, y, velocity, note, volume and filter are shown as numbers in the window.
+#   --no-audio: no sound. --audio-out test.wav: write the sound in sync with
+#   the video instead of playing it (for testing with video files).
+#
 # Marker colors:
 #   GREEN  = ball fully visible
 #   CYAN   = ball partly hidden, center estimated from its visible edge (v3)
@@ -44,6 +51,8 @@ import time
 
 import cv2
 import numpy as np
+
+from ball_sound import BallSound
 
 SETTINGS_FILE = "color_settings.json"
 WINDOW = "Color Ball Tracking"
@@ -81,6 +90,14 @@ def parse_args():
     p.add_argument("--width", type=int, default=1280, help="Processing width")
     p.add_argument("--height", type=int, default=720, help="Processing height")
     p.add_argument("--save", default=None, help="Also write the annotated video to this file (.mp4)")
+    p.add_argument("--mirror", action="store_true",
+                   help="Mirror the image (selfie view), so 'right' on screen is your right")
+    p.add_argument("--no-audio", action="store_true", help="No sound")
+    p.add_argument("--audio-device", default=None, help="sounddevice output device (name or number)")
+    p.add_argument("--audio-out", default=None,
+                   help="Write the sound to this .wav in sync with the frames instead of playing it")
+    p.add_argument("--max-speed", type=float, default=1500.0,
+                   help="Ball speed in px/s that gives full volume. Default: 1500")
     p.add_argument("--no-show", action="store_true", help="Run without a window (for testing)")
     return p.parse_args()
 
@@ -440,6 +457,40 @@ def occlusion_check(b, mask, strictness, lenient, ball_width):
 
 
 # ============================================================
+# VALUE DISPLAY
+# ============================================================
+
+def draw_values(frame, pos, vx, vy, snd):
+    """Panel top left: position, velocity and the sound values as numbers."""
+    x0, y0, w, h = 15, 50, 300, 232
+    roi = frame[y0:y0 + h, x0:x0 + w]
+    frame[y0:y0 + h, x0:x0 + w] = (roi * 0.35).astype(np.uint8)   # darkened background
+
+    def row(i, label, value, color=(255, 255, 255)):
+        yy = y0 + 26 + i * 24
+        cv2.putText(frame, label, (x0 + 10, yy), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (170, 170, 170), 1, cv2.LINE_AA)
+        cv2.putText(frame, value, (x0 + 120, yy), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 1, cv2.LINE_AA)
+
+    if pos is None:
+        row(0, "x", "-")
+        row(1, "y", "-")
+    else:
+        row(0, "x", f"{pos[0]:6.0f} px")
+        row(1, "y", f"{pos[1]:6.0f} px")
+    row(2, "vx", f"{vx:+6.0f} px/s")
+    row(3, "vy", f"{vy:+6.0f} px/s")
+    row(4, "velocity", f"{snd['speed']:6.0f} px/s")
+    arrow = {"G": "G  (-> right)", "A": "A  (<- left)"}.get(snd["note"], "-")
+    row(5, "note", arrow, (0, 255, 255))
+    row(6, "volume", f"{snd['volume'] * 100:5.0f} %")
+    row(7, "filter", f"{snd['cutoff']:6.0f} Hz")
+    # volume bar
+    bw = int((w - 20) * snd["volume"])
+    cv2.rectangle(frame, (x0 + 10, y0 + h - 14), (x0 + w - 10, y0 + h - 8), (60, 60, 60), -1)
+    cv2.rectangle(frame, (x0 + 10, y0 + h - 14), (x0 + 10 + bw, y0 + h - 8), (0, 255, 255), -1)
+
+
+# ============================================================
 # MAIN LOOP
 # ============================================================
 
@@ -485,6 +536,21 @@ def main():
         writer = cv2.VideoWriter(args.save, cv2.VideoWriter_fourcc(*"mp4v"), out_fps,
                                  (args.width, args.height))
 
+    # ---- Sound -------------------------------------------------------------------
+    sound = BallSound(args.width, args.height, max_speed=args.max_speed)
+    audio_chunks, audio_pos = [], 0.0
+    if args.audio_out:
+        print(f"Sound -> {args.audio_out} (in sync with the frames)")
+    elif not args.no_audio:
+        try:
+            dev = int(args.audio_device) if args.audio_device and args.audio_device.isdigit() else args.audio_device
+            sound.synth.start(dev)
+            print("Sound on: ball right -> G, left -> A, speed -> volume, y -> filter")
+        except ImportError:
+            print("No sound: sounddevice is missing. Install with: pip install sounddevice")
+        except Exception as e:
+            print(f"No sound ({e}). Check the output device (--audio-device) or use --no-audio.")
+
     tracker = BallKalman()
 
     def reset_track():
@@ -520,6 +586,8 @@ def main():
             break
         cam_fails = 0
         frame = cv2.resize(frame, (args.width, args.height))
+        if args.mirror:
+            frame = cv2.flip(frame, 1)
 
         now = time.perf_counter()
         loop_dt = now - last_t
@@ -658,12 +726,20 @@ def main():
                 pos = pred
                 state = "hidden" if holding else "predicted"
 
+        vx, vy = tracker.velocity if pos is not None else (0.0, 0.0)
         if pos is not None:
             counts[state] += 1
-            vx, vy = tracker.velocity
             on_ball(frame_idx, pos[0], pos[1], radius, vx, vy, state in ("full", "partial"))
             trail.append((pos[0], pos[1], state))
             trail = trail[-40:]
+
+        # ---- Sound: direction -> note, speed -> volume, y -> filter ---------------
+        snd = sound.update(pos, vx, vy)
+        if args.audio_out:
+            audio_pos += sound.synth.sr * dt
+            n = int(audio_pos)
+            audio_pos -= n
+            audio_chunks.append(sound.synth.render(n))
 
         fps_now = 1.0 / loop_dt if loop_dt > 0 else 0
         fps_smooth = fps_now if fps_smooth == 0 else 0.9 * fps_smooth + 0.1 * fps_now
@@ -688,6 +764,7 @@ def main():
             status = labels.get(state, "searching")
             cv2.putText(frame, f"{VERSION_NAMES[version]} | {fps_smooth:5.1f} FPS | {status}", (15, 35),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
+            draw_values(frame, pos, vx, vy, snd)
             cv2.putText(frame, "1/2/3 = version | click ball = pick color | m = mask | s = save | q = quit",
                         (15, args.height - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
         if writer:
@@ -717,11 +794,18 @@ def main():
                 print("Reset to default green")
         elif frame_idx % 50 == 0:
             p = f"({pos[0]:.0f}, {pos[1]:.0f}) r={radius:.0f}" if pos else "-"
-            print(f"frame {frame_idx:5d} | {fps_smooth:6.1f} FPS | {state or '-':9s} {p}")
+            print(f"frame {frame_idx:5d} | {fps_smooth:6.1f} FPS | {state or '-':9s} {p} | "
+                  f"vx={vx:6.0f} speed={snd['speed']:5.0f} note={snd['note']} "
+                  f"vol={snd['volume']:.2f} filter={snd['cutoff']:5.0f}Hz")
 
         frame_idx += 1
 
     cap.release()
+    sound.synth.stop()
+    if args.audio_out and audio_chunks:
+        from scipy.io import wavfile
+        wavfile.write(args.audio_out, sound.synth.sr, np.concatenate(audio_chunks))
+        print(f"Wrote {args.audio_out}")
     if writer:
         writer.release()
     cv2.destroyAllWindows()

@@ -4,7 +4,8 @@ Eine Webcam verfolgt einen geworfenen Ball in Echtzeit, über seine Farbe (Stand
 
 | Datei | Inhalt |
 |---|---|
-| `color_ball_tracking.py` | **Hauptscript:** Ball-Tracking über die Farbe, ohne Training, ohne GPU |
+| `color_ball_tracking.py` | **Hauptscript:** Ball-Tracking über die Farbe, ohne Training, ohne GPU, mit Klang |
+| `ball_sound.py` | Klang: Richtung → Ton (G/A), Geschwindigkeit → Lautstärke, Höhe → Filter |
 | `camera_check.py` | findet heraus, welche Kamera-Nummer ein echtes Bild liefert |
 | `realtime_ball_tracking.py` | Alternative mit YOLO (KI-Modell), langsamer, erkennt beliebige Sportbälle |
 
@@ -43,6 +44,21 @@ python color_ball_tracking.py --source 1
 1. Ball in die Kamera halten und **im Fenster auf den Ball klicken**. Damit wird genau seine Farbe übernommen.
 2. Mit **`m`** das Masken-Fenster öffnen: Weiß ist alles, was als Ball gilt. Die Regler so einstellen, dass möglichst nur der Ball weiß ist. Abgelehnte Flecken stehen grau im Bild, mit Grund („corners“ = eckig, „ragged“ = ausgefranst, „stretched“ = zu lang).
 3. Mit **`s`** speichern. Die Einstellung landet in `color_settings.json` und wird beim nächsten Start automatisch geladen.
+
+## Klang
+
+Beim Start spielt das Script direkt Ton über die Lautsprecher:
+
+| Ball | Klang |
+|---|---|
+| fliegt nach **rechts** (x wird größer) | Ton **G** (392 Hz) |
+| fliegt nach **links** (x wird kleiner) | Ton **A** (440 Hz) |
+| Geschwindigkeit | Lautstärke: ruhender Ball ist still, ab 1500 px/s volle Lautstärke |
+| Höhe im Bild (y) | Filter: oben hell, unten dumpf |
+
+Es gibt nur diese zwei Töne, kein Gleiten dazwischen. Links oben im Fenster stehen x, y, vx, vy, Geschwindigkeit, der aktuelle Ton, die Lautstärke und die Filterfrequenz als Zahlen.
+
+„Rechts“ heißt rechts im Kamerabild. Mit `--mirror` wird das Bild gespiegelt wie ein Spiegel, dann ist rechts auf dem Bildschirm auch deine rechte Seite.
 
 ## Tasten
 
@@ -83,6 +99,11 @@ Standard ist v3. Mit `--version 2` startet eine andere.
 | `--strictness 0.7` | wie streng die Formprüfung ist (0..1). Höher = weniger Fehlalarme, aber verdeckte/verschmierte Bälle gehen eher verloren. Auch als Regler im Masken-Fenster. |
 | `--hold-seconds 2` | wie lange ein Ball in der Hand gehalten wird |
 | `--save out.mp4` | Ergebnis zusätzlich als Video speichern |
+| `--mirror` | Bild spiegeln (Selfie-Ansicht) |
+| `--max-speed 1500` | Geschwindigkeit in px/s für volle Lautstärke |
+| `--no-audio` | ohne Ton |
+| `--audio-device NAME` | anderes Audio-Ausgabegerät |
+| `--audio-out test.wav` | Ton nicht abspielen, sondern synchron zum Video als WAV speichern (zum Testen mit Videodateien) |
 
 ## Eigene Logik einbauen
 
@@ -93,6 +114,7 @@ In `color_ball_tracking.py` steht oben die Funktion `on_ball()`. Sie wird pro Fr
 - **Licht ist der größte Hebel.** Im Dunkeln belichtet die Kamera länger: Der Ball verschmiert, die Bildrate sinkt, schnelle Würfe werden später erkannt.
 - **Knallige Ballfarbe**, die sonst nirgends im Raum vorkommt (Neongrün, Pink, Orange).
 - Mit `--save test.mp4` aufnehmen und danach in Ruhe mit `--source test.mp4` und verschiedenen Versionen vergleichen.
+- Klang an einer Videodatei testen: `python color_ball_tracking.py --source test.mp4 --save out.mp4 --audio-out out.wav`, dann beides zusammenlegen mit `ffmpeg -i out.mp4 -i out.wav -c:v libx264 -c:a aac -shortest demo.mp4`.
 
 ## YOLO-Variante
 
