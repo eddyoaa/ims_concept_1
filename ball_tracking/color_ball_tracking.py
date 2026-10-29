@@ -1,21 +1,25 @@
 # ============================================================
 # REAL-TIME BALL TRACKING BY COLOR  (OpenCV HSV mask + Kalman filter)
 # ============================================================
-# No YOLO, no training, no GPU. Finds the ball by its color.
-# Default color: green. Works best with a bright, saturated ball
-# (neon green, pink, orange) and a background without that color.
+# No YOLO, no training, no GPU. Finds the balls by their color.
+# Tracks two balls of DIFFERENT colors (default: ball 1 green, ball 2 pink),
+# each with its own color, Kalman filter and sound voice. Because each ball
+# has its own color, ball 1 stays ball 1 even when the balls cross.
+# Works best with bright, saturated balls and a background without those colors.
 #
 # Usage:
 #   python color_ball_tracking.py --source 1
-#   python color_ball_tracking.py --source 1 --version 2
+#   python color_ball_tracking.py --source 1 --balls 1      (only one ball)
 #   python color_ball_tracking.py --source ball.mp4
 #
 # Keys / mouse in the window:
 #   1 / 2 / 3          -> switch detection version live (also the slider on top)
-#   CLICK on the ball  -> use that exact color (auto-calibration)
-#   m                  -> show/hide the mask window with sliders + debug view
-#   s                  -> save current color settings (color_settings.json)
-#   r                  -> reset to default green
+#   b / TAB            -> switch the active ball (the one that clicks/sliders change)
+#   LEFT CLICK on ball -> use that exact color for the active ball
+#   RIGHT CLICK on ball-> use that exact color for ball 2
+#   m                  -> show/hide the mask window (active ball) with sliders + debug view
+#   s                  -> save color settings of both balls (color_settings.json)
+#   r                  -> reset the active ball to its default color
 #   q / ESC            -> quit
 #
 # Versions:
@@ -30,10 +34,10 @@
 #       while moving slowly (held in a hand), its position is kept for a
 #       while ("hidden") instead of being dropped.
 #
-# Sound (ball_sound.py), exactly two notes:
-#   ball moves right (x grows)   -> G4      speed -> volume (still ball = silent)
-#   ball moves left  (x shrinks) -> A4      y     -> low-pass filter (top bright, bottom dull)
-#   x, y, velocity, note, volume and filter are shown as numbers in the window.
+# Sound (ball_sound.py), one voice per ball, exactly two notes each:
+#   ball moves right (x grows)   -> ball 1 G4, ball 2 D5   speed -> volume (still ball = silent)
+#   ball moves left  (x shrinks) -> ball 1 A4, ball 2 E5   y     -> low-pass filter (top bright)
+#   x, y, velocity, note, volume and filter are shown as numbers per ball in the window.
 #   --no-audio: no sound. --audio-out test.wav: write the sound in sync with
 #   the video instead of playing it (for testing with video files).
 #
@@ -52,7 +56,7 @@ import time
 import cv2
 import numpy as np
 
-from ball_sound import BallSound
+from ball_sound import NOTE_PAIRS, BallSound, Mixer
 
 SETTINGS_FILE = "color_settings.json"
 WINDOW = "Color Ball Tracking"
@@ -60,6 +64,9 @@ WINDOW = "Color Ball Tracking"
 # HSV ranges in OpenCV: H 0-179, S 0-255, V 0-255
 DEFAULT_GREEN = {"h_min": 35, "h_max": 85, "s_min": 80, "s_max": 255, "v_min": 40, "v_max": 255,
                  "strictness": 70}   # strictness in percent (slider)
+DEFAULT_PINK = {"h_min": 145, "h_max": 175, "s_min": 80, "s_max": 255, "v_min": 60, "v_max": 255,
+                "strictness": 70}
+DEFAULT_BALLS = [DEFAULT_GREEN, DEFAULT_PINK]
 
 VERSION_NAMES = {1: "v1 color only", 2: "v2 shape filter", 3: "v3 + hand occlusion"}
 
@@ -78,6 +85,8 @@ def parse_args():
     p.add_argument("--source", default="0", help="Camera index (0, 1, ...) or video file. Default: 0")
     p.add_argument("--version", type=int, default=3, choices=[1, 2, 3],
                    help="Detection version to start with (switch live with keys 1/2/3). Default: 3")
+    p.add_argument("--balls", type=int, default=2, choices=[1, 2],
+                   help="Number of balls (each needs its own color). Default: 2")
     p.add_argument("--min-radius", type=float, default=4, help="Ignore blobs smaller than this (px)")
     p.add_argument("--strictness", type=float, default=None,
                    help="0..1, how strictly blobs must look like a ball (v2/v3). Higher = fewer "
@@ -152,9 +161,10 @@ class BallKalman:
 # HOOK FOR YOUR OWN CODE
 # ============================================================
 
-def on_ball(frame_idx, x, y, radius, vx, vy, detected):
-    """Called once per frame while the ball is tracked.
+def on_ball(ball, frame_idx, x, y, radius, vx, vy, detected):
+    """Called once per frame and ball while that ball is tracked.
 
+    ball    : 0 = ball 1, 1 = ball 2
     x, y    : ball center in pixels
     radius  : apparent size in pixels (bigger = closer to the camera)
     vx, vy  : velocity in pixels/second (vy > 0 = moving down)
@@ -171,21 +181,36 @@ def on_ball(frame_idx, x, y, radius, vx, vy, detected):
 # ============================================================
 
 def load_settings():
+    """Color settings for both balls. Old files with only one ball are used for ball 1."""
+    out = [dict(d) for d in DEFAULT_BALLS]
     if os.path.exists(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE) as f:
-                s = json.load(f)
-            print(f"Loaded color settings from {SETTINGS_FILE}: {s}")
-            return {**DEFAULT_GREEN, **s}
+                data = json.load(f)
+            balls = data["balls"] if "balls" in data else [data]
+            for i, s in enumerate(balls[:len(out)]):
+                out[i] = {**DEFAULT_BALLS[i], **s}
+            print(f"Loaded color settings from {SETTINGS_FILE}")
         except Exception as e:
-            print(f"Could not read {SETTINGS_FILE} ({e}), using default green")
-    return dict(DEFAULT_GREEN)
+            print(f"Could not read {SETTINGS_FILE} ({e}), using default colors")
+    return out
 
 
-def save_settings(s):
+def save_settings(all_settings):
     with open(SETTINGS_FILE, "w") as f:
-        json.dump(s, f, indent=2)
-    print(f"Saved color settings to {SETTINGS_FILE}: {s}")
+        json.dump({"balls": all_settings}, f, indent=2)
+    print(f"Saved color settings of {len(all_settings)} balls to {SETTINGS_FILE}")
+
+
+def colors_overlap(a, b):
+    """True if two color ranges share colors -> both balls could track the same blob."""
+    return all(a[k + "_min"] <= b[k + "_max"] and b[k + "_min"] <= a[k + "_max"] for k in "hsv")
+
+
+def warn_overlap(tracks):
+    if len(tracks) == 2 and colors_overlap(tracks[0].settings, tracks[1].settings):
+        print("WARNING: the colors of ball 1 and ball 2 overlap. Both may follow the same ball. "
+              "Use balls with clearly different colors (click each ball to calibrate).")
 
 
 def settings_from_click(hsv, x, y):
@@ -457,33 +482,223 @@ def occlusion_check(b, mask, strictness, lenient, ball_width):
 
 
 # ============================================================
+# ONE TRACKED BALL
+# ============================================================
+# Everything that belongs to one ball: its color, its Kalman filter and
+# its track state. Two balls = two of these, each looking only at the
+# mask of its own color.
+
+STATE_COLORS = {"full": COL_DETECTED, "partial": COL_PARTIAL, "predicted": COL_PREDICTED, "hidden": COL_HIDDEN}
+STATE_LABELS = {"full": "detected", "partial": "partly hidden", "predicted": "predicted", "hidden": "in hand?"}
+
+
+class BallTrack:
+    def __init__(self, index, settings, args):
+        self.index = index
+        self.name = f"Ball {index + 1}"
+        self.settings = settings     # same dict as in the list that gets saved
+        self.args = args
+        self.kf = BallKalman()
+        self.counts = {"full": 0, "partial": 0, "predicted": 0, "hidden": 0}
+        self.mask = None
+        self.rejected = []
+        self.reset()
+
+    def reset(self):
+        self.kf.initialized = False
+        self.trail = []
+        self.missed = 0
+        self.track_age = 0          # frames since the track started
+        self.radius = 0.0
+        self.ball_width = 0.0       # smoothed diameter of the tracked ball
+        self.holding = False        # v3: ball disappeared while slow -> probably in a hand
+        self.hidden_time = 0.0
+        self.pos, self.state = None, None   # state: full / partial / predicted / hidden
+        self.vx = self.vy = 0.0
+
+    @property
+    def color(self):
+        """BGR color of the calibrated hue, for labels."""
+        h = (self.settings["h_min"] + self.settings["h_max"]) // 2
+        b, g, r = cv2.cvtColor(np.uint8([[[h, 200, 255]]]), cv2.COLOR_HSV2BGR)[0, 0]
+        return int(b), int(g), int(r)
+
+    @property
+    def status(self):
+        return STATE_LABELS.get(self.state, "searching")
+
+    def step(self, hsv, dt, version):
+        """Find this ball in the frame (HSV) and update its track."""
+        args, tracker = self.args, self.kf
+
+        # ---- 1. Color mask --------------------------------------------------
+        mask = make_mask(hsv, self.settings, version)
+        blobs = find_blobs(mask, args.min_radius)
+        strictness = self.settings["strictness"] / 100.0
+
+        # ---- 2. Predict -----------------------------------------------------
+        if self.holding:
+            tracker.damp_velocity(0.5)   # held ball: assume it stays where it vanished
+        pred = tracker.predict(dt) if tracker.initialized else None
+        gate = 0.0
+        if pred is not None:
+            vx, vy = tracker.velocity
+            # Search radius around the prediction. Larger while the track is
+            # new (velocity not known yet) and while the ball is hidden.
+            gate = 100 + (vx * vx + vy * vy) ** 0.5 * dt * 2 + self.missed * 25
+            if version >= 2 and self.track_age < 4:
+                gate += 150
+            if self.holding:
+                gate = min(gate, 250)
+
+        def is_near(b):
+            return pred is not None and ((b["x"] - pred[0]) ** 2 + (b["y"] - pred[1]) ** 2) ** 0.5 <= gate
+
+        # ---- 3. Shape checks ------------------------------------------------
+        accepted, rejected = [], []
+        for b in blobs:
+            near = is_near(b)
+            if version == 1:
+                ok, reason = shape_check_v1(b)
+            else:
+                # near the prediction, but a different size than our ball -> something else
+                if near and self.ball_width > 0 and not b["border"] and \
+                        not (self.ball_width / 1.8 <= b["width"] <= self.ball_width * 1.8):
+                    near = False
+                ok, reason = shape_check(b, strictness, lenient=near)
+                b["reason"] = reason
+                if not ok and version == 3 and reason != "corners":
+                    ok, reason = occlusion_check(b, mask, strictness, is_near(b), self.ball_width)
+                    near = ok and is_near(b)
+            b["near"], b["reason"] = near, reason
+            (accepted if ok else rejected).append(b)
+
+        if version == 3:
+            # Ball split into pieces by fingers: try the pieces as one ball
+            for g in group_pieces(blobs, mask.shape):
+                if any(blobs[i]["kind"] == "full" and any(blobs[i] is a for a in accepted)
+                       for i in g["members"]):
+                    continue
+                ok, _ = occlusion_check(g, mask, strictness, is_near(g), self.ball_width)
+                if ok:
+                    g["near"] = is_near(g)
+                    members = [blobs[i] for i in g["members"]]
+                    accepted = [b for b in accepted if not any(b is m for m in members)]
+                    rejected = [b for b in rejected if not any(b is m for m in members)]
+                    accepted.append(g)
+
+        # ---- 4. Choose the blob that is our ball ---------------------------
+        measurement = None
+        if accepted:
+            near_ones = [b for b in accepted if b["near"]]
+            if near_ones:
+                measurement = min(near_ones, key=lambda b: (b["x"] - pred[0]) ** 2 + (b["y"] - pred[1]) ** 2)
+            elif not self.holding or version < 3:
+                biggest = max(accepted, key=lambda b: b["area"])
+                if pred is None or biggest["area"] > 4 * max(np.pi * self.radius ** 2, 1):
+                    measurement = biggest      # new ball, or a much bigger one elsewhere
+                    tracker.initialized = False
+            else:
+                # Holding: only jump elsewhere for a clearly visible ball
+                full = [b for b in accepted if b["kind"] == "full" and not b["border"]]
+                if full:
+                    measurement = max(full, key=lambda b: b["area"])
+                    tracker.initialized = False
+
+        # ---- 5. Update ------------------------------------------------------
+        state, pos = None, None
+        if measurement is not None:
+            mx, my, mr = measurement["x"], measurement["y"], measurement["r"]
+            if measurement["border"] and self.radius > 0 and measurement["kind"] == "full":
+                mr = max(mr, self.radius)          # don't shrink while half outside
+            self.radius = mr if self.radius == 0 or not tracker.initialized else 0.6 * self.radius + 0.4 * mr
+            if not measurement["border"]:
+                mw = measurement["width"]
+                self.ball_width = mw if self.ball_width == 0 or not tracker.initialized \
+                    else 0.7 * self.ball_width + 0.3 * mw
+            if not tracker.initialized:
+                tracker.init(mx, my)
+                self.trail.clear()
+                self.track_age = 0
+                pos = (mx, my)
+            else:
+                pos = tracker.correct(mx, my)
+            self.track_age += 1
+            self.missed, self.holding, self.hidden_time = 0, False, 0.0
+            state = measurement["kind"]
+        elif tracker.initialized:
+            if self.missed == 0 and version == 3:
+                vx, vy = tracker.velocity
+                self.holding = (vx * vx + vy * vy) ** 0.5 < 300   # slow when it vanished -> in a hand
+            self.missed += 1
+            self.hidden_time += dt
+            m_out = max(self.radius, 10)
+            off_screen = not (-m_out <= pred[0] <= args.width + m_out and -m_out <= pred[1] <= args.height + m_out)
+            lost = self.hidden_time > args.hold_seconds if self.holding else self.missed > args.max_missed
+            if version == 1:
+                off_screen = False   # v1 had no off-screen check
+            if lost or off_screen:
+                self.reset()
+            else:
+                pos = pred
+                state = "hidden" if self.holding else "predicted"
+
+        self.mask, self.rejected = mask, rejected
+        self.pos, self.state = pos, state
+        self.vx, self.vy = tracker.velocity if pos is not None else (0.0, 0.0)
+        if pos is not None:
+            self.counts[state] += 1
+            self.trail.append((pos[0], pos[1], state))
+            self.trail = self.trail[-40:]
+
+    def draw(self, frame, show_rejected):
+        if show_rejected:
+            # Debug view: why blobs were rejected
+            for b in self.rejected:
+                cv2.circle(frame, (int(b["x"]), int(b["y"])), int(b["r"]), (150, 150, 150), 1)
+                cv2.putText(frame, b["reason"], (int(b["x"] - b["r"]), int(b["y"] - b["r"] - 4)),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1, cv2.LINE_AA)
+        for i in range(1, len(self.trail)):
+            (x0, y0, s0), (x1, y1, _) = self.trail[i - 1], self.trail[i]
+            cv2.line(frame, (int(x0), int(y0)), (int(x1), int(y1)), STATE_COLORS[s0], 2)
+        if self.pos is not None:
+            x, y = int(self.pos[0]), int(self.pos[1])
+            r = int(max(self.radius, 6)) + 4
+            cv2.circle(frame, (x, y), r, STATE_COLORS[self.state], 2)
+            cv2.circle(frame, (x, y), 3, STATE_COLORS[self.state], -1)
+            cv2.putText(frame, str(self.index + 1), (x + r + 2, y - r), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.8, self.color, 2, cv2.LINE_AA)
+
+
+# ============================================================
 # VALUE DISPLAY
 # ============================================================
 
-def draw_values(frame, pos, vx, vy, snd):
-    """Panel top left: position, velocity and the sound values as numbers."""
-    x0, y0, w, h = 15, 50, 300, 232
+def draw_values(frame, x0, track, snd, active):
+    """Panel per ball: position, velocity and the sound values as numbers."""
+    y0, w, h = 50, 300, 256
     roi = frame[y0:y0 + h, x0:x0 + w]
     frame[y0:y0 + h, x0:x0 + w] = (roi * 0.35).astype(np.uint8)   # darkened background
+    if active:
+        cv2.rectangle(frame, (x0, y0), (x0 + w - 1, y0 + h - 1), track.color, 1)
 
     def row(i, label, value, color=(255, 255, 255)):
         yy = y0 + 26 + i * 24
         cv2.putText(frame, label, (x0 + 10, yy), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (170, 170, 170), 1, cv2.LINE_AA)
         cv2.putText(frame, value, (x0 + 120, yy), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 1, cv2.LINE_AA)
 
-    if pos is None:
-        row(0, "x", "-")
-        row(1, "y", "-")
-    else:
-        row(0, "x", f"{pos[0]:6.0f} px")
-        row(1, "y", f"{pos[1]:6.0f} px")
-    row(2, "vx", f"{vx:+6.0f} px/s")
-    row(3, "vy", f"{vy:+6.0f} px/s")
-    row(4, "velocity", f"{snd['speed']:6.0f} px/s")
-    arrow = {"G": "G  (-> right)", "A": "A  (<- left)"}.get(snd["note"], "-")
-    row(5, "note", arrow, (0, 255, 255))
-    row(6, "volume", f"{snd['volume'] * 100:5.0f} %")
-    row(7, "filter", f"{snd['cutoff']:6.0f} Hz")
+    cv2.putText(frame, track.name + ("  (active)" if active else ""), (x0 + 10, y0 + 26),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, track.color, 2, cv2.LINE_AA)
+    pos = track.pos
+    row(1, "x", "-" if pos is None else f"{pos[0]:6.0f} px")
+    row(2, "y", "-" if pos is None else f"{pos[1]:6.0f} px")
+    row(3, "vx", f"{track.vx:+6.0f} px/s")
+    row(4, "vy", f"{track.vy:+6.0f} px/s")
+    row(5, "velocity", f"{snd['speed']:6.0f} px/s")
+    arrow = {"right": "  (-> right)", "left": "  (<- left)"}.get(snd["direction"], "")
+    row(6, "note", snd["note"] + arrow, (0, 255, 255))
+    row(7, "volume", f"{snd['volume'] * 100:5.0f} %")
+    row(8, "filter", f"{snd['cutoff']:6.0f} Hz")
     # volume bar
     bw = int((w - 20) * snd["volume"])
     cv2.rectangle(frame, (x0 + 10, y0 + h - 14), (x0 + w - 10, y0 + h - 8), (60, 60, 60), -1)
@@ -512,12 +727,22 @@ def main():
     file_fps = cap.get(cv2.CAP_PROP_FPS) if not is_camera else 0
     file_dt = 1.0 / file_fps if file_fps and file_fps > 0 else 1 / 30
 
-    settings = load_settings()
+    all_settings = load_settings()   # always both balls, so saving keeps ball 2 with --balls 1
     if args.strictness is not None:
-        settings["strictness"] = int(round(args.strictness * 100))
+        for s in all_settings:
+            s["strictness"] = int(round(args.strictness * 100))
+    tracks = [BallTrack(i, all_settings[i], args) for i in range(args.balls)]
+    warn_overlap(tracks)
     version = args.version
     show_mask = False
-    clicked = []   # mouse clicks from the window callback
+    active = 0       # ball that left click, sliders and 'r' change
+    clicked = []     # (x, y, ball index or None = active ball) from the mouse callback
+
+    def on_mouse(ev, x, y, flags, param):
+        if ev == cv2.EVENT_LBUTTONDOWN:
+            clicked.append((x, y, None))
+        elif ev == cv2.EVENT_RBUTTONDOWN and len(tracks) > 1:
+            clicked.append((x, y, 1))
 
     if not args.no_show:
         cv2.namedWindow(WINDOW, cv2.WINDOW_AUTOSIZE)
@@ -526,9 +751,9 @@ def main():
             cv2.setTrackbarMin("Version", WINDOW, 1)
         except cv2.error:
             pass   # older OpenCV builds: 0 is treated as 1
-        cv2.setMouseCallback(WINDOW, lambda ev, x, y, fl, prm:
-                             clicked.append((x, y)) if ev == cv2.EVENT_LBUTTONDOWN else None)
-        print("Keys: 1/2/3 = version, click ball = pick color, m = mask, s = save, q = quit")
+        cv2.setMouseCallback(WINDOW, on_mouse)
+        print("Keys: 1/2/3 = version, b = switch ball, left click = color of active ball, "
+              "right click = color of ball 2, m = mask, s = save, q = quit")
 
     writer = None
     if args.save:
@@ -536,40 +761,26 @@ def main():
         writer = cv2.VideoWriter(args.save, cv2.VideoWriter_fourcc(*"mp4v"), out_fps,
                                  (args.width, args.height))
 
-    # ---- Sound -------------------------------------------------------------------
-    sound = BallSound(args.width, args.height, max_speed=args.max_speed)
+    # ---- Sound: one voice per ball, mixed into one stream ------------------------
+    sounds = [BallSound(args.width, args.height, max_speed=args.max_speed, notes=NOTE_PAIRS[i],
+                        gain=0.35 if len(tracks) == 1 else 0.28)
+              for i in range(len(tracks))]
+    mixer = Mixer([s.synth for s in sounds])
     audio_chunks, audio_pos = [], 0.0
     if args.audio_out:
         print(f"Sound -> {args.audio_out} (in sync with the frames)")
     elif not args.no_audio:
         try:
             dev = int(args.audio_device) if args.audio_device and args.audio_device.isdigit() else args.audio_device
-            sound.synth.start(dev)
-            print("Sound on: ball right -> G, left -> A, speed -> volume, y -> filter")
+            mixer.start(dev)
+            print("Sound on: ball 1 right -> G / left -> A, ball 2 right -> D / left -> E, "
+                  "speed -> volume, y -> filter")
         except ImportError:
             print("No sound: sounddevice is missing. Install with: pip install sounddevice")
         except Exception as e:
             print(f"No sound ({e}). Check the output device (--audio-device) or use --no-audio.")
 
-    tracker = BallKalman()
-
-    def reset_track():
-        nonlocal missed, track_age, radius, ball_width, holding, hidden_time
-        tracker.initialized = False
-        trail.clear()
-        missed = track_age = 0
-        radius = ball_width = hidden_time = 0.0
-        holding = False
-
-    missed = 0
-    track_age = 0          # frames since the track started
-    radius = 0.0
-    ball_width = 0.0       # smoothed diameter of the tracked ball
-    holding = False        # v3: ball disappeared while slow -> probably in a hand
-    hidden_time = 0.0
-    trail = []
     frame_idx = 0
-    counts = {"full": 0, "partial": 0, "predicted": 0, "hidden": 0}
     cam_fails = 0
     last_t = time.perf_counter()
     fps_smooth = 0.0
@@ -599,220 +810,116 @@ def main():
             v = max(1, cv2.getTrackbarPos("Version", WINDOW))
             if v != version:
                 version = v
-                reset_track()
+                for t in tracks:
+                    t.reset()
                 print(f"Switched to {VERSION_NAMES[version]}")
 
-        # ---- 1. Color mask -------------------------------------------------
+        # ---- 1. Colors (shared by all balls) ---------------------------------
         blurred = cv2.GaussianBlur(frame, (5, 5), 0)
         hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
 
         if clicked:
-            cx, cy = clicked.pop()
+            cx, cy, i = clicked.pop()
             clicked.clear()
-            settings = {**settings_from_click(hsv, cx, cy), "strictness": settings["strictness"]}
-            print(f"Picked color at ({cx}, {cy}): {settings}")
-            if show_mask:
-                write_sliders(settings)
+            t = tracks[active if i is None else i]
+            t.settings.update(settings_from_click(hsv, cx, cy))   # strictness is kept
+            print(f"{t.name}: picked color at ({cx}, {cy}): {t.settings}")
+            warn_overlap(tracks)
+            if show_mask and t.index == active:
+                write_sliders(t.settings)
         elif show_mask:
-            read_sliders(settings)
+            read_sliders(tracks[active].settings)
 
-        mask = make_mask(hsv, settings, version)
-        blobs = find_blobs(mask, args.min_radius)
-        strictness = settings["strictness"] / 100.0
-
-        # ---- 2. Predict -----------------------------------------------------
-        if holding:
-            tracker.damp_velocity(0.5)   # held ball: assume it stays where it vanished
-        pred = tracker.predict(dt) if tracker.initialized else None
-        gate = 0.0
-        if pred is not None:
-            vx, vy = tracker.velocity
-            # Search radius around the prediction. Larger while the track is
-            # new (velocity not known yet) and while the ball is hidden.
-            gate = 100 + (vx * vx + vy * vy) ** 0.5 * dt * 2 + missed * 25
-            if version >= 2 and track_age < 4:
-                gate += 150
-            if holding:
-                gate = min(gate, 250)
-
-        def is_near(b):
-            return pred is not None and ((b["x"] - pred[0]) ** 2 + (b["y"] - pred[1]) ** 2) ** 0.5 <= gate
-
-        # ---- 3. Shape checks ------------------------------------------------
-        accepted, rejected = [], []
-        for b in blobs:
-            near = is_near(b)
-            if version == 1:
-                ok, reason = shape_check_v1(b)
-            else:
-                # near the prediction, but a different size than our ball -> something else
-                if near and ball_width > 0 and not b["border"] and \
-                        not (ball_width / 1.8 <= b["width"] <= ball_width * 1.8):
-                    near = False
-                ok, reason = shape_check(b, strictness, lenient=near)
-                b["reason"] = reason
-                if not ok and version == 3 and reason != "corners":
-                    ok, reason = occlusion_check(b, mask, strictness, is_near(b), ball_width)
-                    near = ok and is_near(b)
-            b["near"], b["reason"] = near, reason
-            (accepted if ok else rejected).append(b)
-
-        if version == 3:
-            # Ball split into pieces by fingers: try the pieces as one ball
-            for g in group_pieces(blobs, mask.shape):
-                if any(blobs[i]["kind"] == "full" and any(blobs[i] is a for a in accepted)
-                       for i in g["members"]):
-                    continue
-                ok, _ = occlusion_check(g, mask, strictness, is_near(g), ball_width)
-                if ok:
-                    g["near"] = is_near(g)
-                    members = [blobs[i] for i in g["members"]]
-                    accepted = [b for b in accepted if not any(b is m for m in members)]
-                    rejected = [b for b in rejected if not any(b is m for m in members)]
-                    accepted.append(g)
-
-        # ---- 4. Choose the blob that is our ball ---------------------------
-        measurement = None
-        if accepted:
-            near_ones = [b for b in accepted if b["near"]]
-            if near_ones:
-                measurement = min(near_ones, key=lambda b: (b["x"] - pred[0]) ** 2 + (b["y"] - pred[1]) ** 2)
-            elif not holding or version < 3:
-                biggest = max(accepted, key=lambda b: b["area"])
-                if pred is None or biggest["area"] > 4 * max(np.pi * radius ** 2, 1):
-                    measurement = biggest      # new ball, or a much bigger one elsewhere
-                    tracker.initialized = False
-            else:
-                # Holding: only jump elsewhere for a clearly visible ball
-                full = [b for b in accepted if b["kind"] == "full" and not b["border"]]
-                if full:
-                    measurement = max(full, key=lambda b: b["area"])
-                    tracker.initialized = False
-
-        # ---- 5. Update ------------------------------------------------------
-        state, pos = None, None   # full / partial / predicted / hidden
-        if measurement is not None:
-            mx, my, mr = measurement["x"], measurement["y"], measurement["r"]
-            if measurement["border"] and radius > 0 and measurement["kind"] == "full":
-                mr = max(mr, radius)               # don't shrink while half outside
-            radius = mr if radius == 0 or not tracker.initialized else 0.6 * radius + 0.4 * mr
-            if not measurement["border"]:
-                mw = measurement["width"]
-                ball_width = mw if ball_width == 0 or not tracker.initialized else 0.7 * ball_width + 0.3 * mw
-            if not tracker.initialized:
-                tracker.init(mx, my)
-                trail.clear()
-                track_age = 0
-                pos = (mx, my)
-            else:
-                pos = tracker.correct(mx, my)
-            track_age += 1
-            missed, holding, hidden_time = 0, False, 0.0
-            state = measurement["kind"]
-        elif tracker.initialized:
-            if missed == 0 and version == 3:
-                vx, vy = tracker.velocity
-                holding = (vx * vx + vy * vy) ** 0.5 < 300   # slow when it vanished -> in a hand
-            missed += 1
-            hidden_time += dt
-            m_out = max(radius, 10)
-            off_screen = not (-m_out <= pred[0] <= args.width + m_out and -m_out <= pred[1] <= args.height + m_out)
-            lost = hidden_time > args.hold_seconds if holding else missed > args.max_missed
-            if version == 1:
-                off_screen = False   # v1 had no off-screen check
-            if lost or off_screen:
-                reset_track()
-            else:
-                pos = pred
-                state = "hidden" if holding else "predicted"
-
-        vx, vy = tracker.velocity if pos is not None else (0.0, 0.0)
-        if pos is not None:
-            counts[state] += 1
-            on_ball(frame_idx, pos[0], pos[1], radius, vx, vy, state in ("full", "partial"))
-            trail.append((pos[0], pos[1], state))
-            trail = trail[-40:]
+        # ---- 2.-5. Track each ball in its own color --------------------------
+        for t in tracks:
+            t.step(hsv, dt, version)
+            if t.pos is not None:
+                on_ball(t.index, frame_idx, t.pos[0], t.pos[1], t.radius, t.vx, t.vy,
+                        t.state in ("full", "partial"))
 
         # ---- Sound: direction -> note, speed -> volume, y -> filter ---------------
-        snd = sound.update(pos, vx, vy)
+        snds = [s.update(t.pos, t.vx, t.vy) for s, t in zip(sounds, tracks)]
         if args.audio_out:
-            audio_pos += sound.synth.sr * dt
+            audio_pos += mixer.sr * dt
             n = int(audio_pos)
             audio_pos -= n
-            audio_chunks.append(sound.synth.render(n))
+            audio_chunks.append(mixer.render(n))
 
         fps_now = 1.0 / loop_dt if loop_dt > 0 else 0
         fps_smooth = fps_now if fps_smooth == 0 else 0.9 * fps_smooth + 0.1 * fps_now
 
         # ---- 6. Draw ----------------------------------------------------------
-        colors = {"full": COL_DETECTED, "partial": COL_PARTIAL, "predicted": COL_PREDICTED, "hidden": COL_HIDDEN}
         if not args.no_show or writer:
-            if show_mask:
-                # Debug view: why blobs were rejected
-                for b in rejected:
-                    cv2.circle(frame, (int(b["x"]), int(b["y"])), int(b["r"]), (150, 150, 150), 1)
-                    cv2.putText(frame, b["reason"], (int(b["x"] - b["r"]), int(b["y"] - b["r"] - 4)),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1, cv2.LINE_AA)
-            for i in range(1, len(trail)):
-                (x0, y0, s0), (x1, y1, _) = trail[i - 1], trail[i]
-                cv2.line(frame, (int(x0), int(y0)), (int(x1), int(y1)), colors[s0], 2)
-            if pos is not None:
-                cv2.circle(frame, (int(pos[0]), int(pos[1])), int(max(radius, 6)) + 4, colors[state], 2)
-                cv2.circle(frame, (int(pos[0]), int(pos[1])), 3, colors[state], -1)
-            labels = {"full": "detected", "partial": "detected (partly hidden)",
-                      "predicted": "predicted", "hidden": "hidden (in hand?)"}
-            status = labels.get(state, "searching")
+            for t in tracks:
+                t.draw(frame, show_mask)
+            status = " | ".join(f"{t.index + 1}: {t.status}" for t in tracks)
             cv2.putText(frame, f"{VERSION_NAMES[version]} | {fps_smooth:5.1f} FPS | {status}", (15, 35),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
-            draw_values(frame, pos, vx, vy, snd)
-            cv2.putText(frame, "1/2/3 = version | click ball = pick color | m = mask | s = save | q = quit",
-                        (15, args.height - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+            for t, snd in zip(tracks, snds):
+                draw_values(frame, 15 + t.index * 315, t, snd, len(tracks) > 1 and t.index == active)
+            cv2.putText(frame, "1/2/3 = version | b = switch ball | click = pick color "
+                               "(right click = ball 2) | m = mask | s = save | q = quit",
+                        (15, args.height - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
         if writer:
             writer.write(frame)
 
         if not args.no_show:
             cv2.imshow(WINDOW, frame)
             if show_mask:
-                cv2.imshow("Mask", cv2.resize(mask, (640, 360)))
+                t = tracks[active]
+                m = cv2.cvtColor(cv2.resize(t.mask, (640, 360)), cv2.COLOR_GRAY2BGR)
+                cv2.putText(m, f"{t.name} (b = switch)", (10, 25), cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7, t.color, 2, cv2.LINE_AA)
+                cv2.imshow("Mask", m)
             key = cv2.waitKey(1) & 0xFF
             if key in (ord("q"), 27):
                 break
             elif key in (ord("1"), ord("2"), ord("3")):
                 cv2.setTrackbarPos("Version", WINDOW, key - ord("0"))   # picked up next frame
+            elif key in (ord("b"), 9) and len(tracks) > 1:
+                active = (active + 1) % len(tracks)
+                if show_mask:
+                    write_sliders(tracks[active].settings)
+                print(f"Active: {tracks[active].name}")
             elif key == ord("m"):
                 show_mask = not show_mask
                 if show_mask:
-                    create_mask_window(settings)
+                    create_mask_window(tracks[active].settings)
                 else:
                     cv2.destroyWindow("Mask")
             elif key == ord("s"):
-                save_settings(settings)
+                save_settings(all_settings)
             elif key == ord("r"):
-                settings = dict(DEFAULT_GREEN)
+                t = tracks[active]
+                t.settings.update(DEFAULT_BALLS[active])
                 if show_mask:
-                    write_sliders(settings)
-                print("Reset to default green")
+                    write_sliders(t.settings)
+                print(f"{t.name}: reset to default color")
         elif frame_idx % 50 == 0:
-            p = f"({pos[0]:.0f}, {pos[1]:.0f}) r={radius:.0f}" if pos else "-"
-            print(f"frame {frame_idx:5d} | {fps_smooth:6.1f} FPS | {state or '-':9s} {p} | "
-                  f"vx={vx:6.0f} speed={snd['speed']:5.0f} note={snd['note']} "
-                  f"vol={snd['volume']:.2f} filter={snd['cutoff']:5.0f}Hz")
+            parts = []
+            for t, snd in zip(tracks, snds):
+                p = f"({t.pos[0]:.0f}, {t.pos[1]:.0f}) r={t.radius:.0f}" if t.pos else "-"
+                parts.append(f"{t.index + 1}: {t.state or '-':9s} {p} vx={t.vx:6.0f} "
+                             f"note={snd['note']} vol={snd['volume']:.2f}")
+            print(f"frame {frame_idx:5d} | {fps_smooth:6.1f} FPS | " + " | ".join(parts))
 
         frame_idx += 1
 
     cap.release()
-    sound.synth.stop()
+    mixer.stop()
     if args.audio_out and audio_chunks:
         from scipy.io import wavfile
-        wavfile.write(args.audio_out, sound.synth.sr, np.concatenate(audio_chunks))
+        wavfile.write(args.audio_out, mixer.sr, np.concatenate(audio_chunks))
         print(f"Wrote {args.audio_out}")
     if writer:
         writer.release()
-    cv2.destroyAllWindows()
-    lost = frame_idx - sum(counts.values())
-    print(f"Done ({VERSION_NAMES[version]}). {frame_idx} frames | visible {counts['full']}, "
-          f"partly hidden {counts['partial']}, predicted {counts['predicted']}, "
-          f"hidden {counts['hidden']}, no ball {lost}")
+    if not args.no_show:
+        cv2.destroyAllWindows()
+    print(f"Done ({VERSION_NAMES[version]}). {frame_idx} frames")
+    for t in tracks:
+        c = t.counts
+        print(f"  {t.name}: visible {c['full']}, partly hidden {c['partial']}, predicted {c['predicted']}, "
+              f"hidden {c['hidden']}, no ball {frame_idx - sum(c.values())}")
 
 
 if __name__ == "__main__":

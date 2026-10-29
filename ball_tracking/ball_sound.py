@@ -1,11 +1,14 @@
-"""Klang zum Ball-Tracking: genau zwei Toene, plus Filter und Lautstaerke.
+"""Klang zum Ball-Tracking: pro Ball zwei Toene, plus Filter und Lautstaerke.
 
-    Ball fliegt nach rechts (x wird groesser)  -> G4 (392 Hz)
-    Ball fliegt nach links  (x wird kleiner)   -> A4 (440 Hz)
+    Ball fliegt nach rechts (x wird groesser)  -> Ball 1: G4 (392 Hz), Ball 2: D5 (587 Hz)
+    Ball fliegt nach links  (x wird kleiner)   -> Ball 1: A4 (440 Hz), Ball 2: E5 (659 Hz)
     Geschwindigkeit                            -> Lautstaerke (Ball still = leise)
     Hoehe im Bild (y)                          -> Tiefpass-Filter (oben hell, unten dumpf)
 
-Klangquelle ist eine einzelne Saegezahnwelle (ein Ton mit Obertoenen, damit
+Jeder Ball hat eine eigene Stimme (ToneSynth). Der Mixer addiert alle Stimmen
+in einen gemeinsamen Audio-Stream.
+
+Klangquelle pro Stimme ist eine einzelne Saegezahnwelle (ein Ton mit Obertoenen, damit
 der Filter etwas zum Formen hat). Kein Gleiten zwischen den Toenen, kein Hall,
 keine Zusatztoene. Der Ton wechselt sofort; nur Lautstaerke und Filter werden
 ein paar Millisekunden geglaettet, damit nichts knackt.
@@ -20,6 +23,12 @@ from scipy.signal import lfilter
 
 NOTE_RIGHT = ("G", 392.00)   # G4
 NOTE_LEFT = ("A", 440.00)    # A4
+
+# (rechts, links) pro Ball
+NOTE_PAIRS = [
+    (NOTE_RIGHT, NOTE_LEFT),               # Ball 1: G4 / A4
+    (("D", 587.33), ("E", 659.25)),        # Ball 2: D5 / E5
+]
 
 
 def _polyblep(t, dt):
@@ -107,17 +116,46 @@ class ToneSynth:
             self._stream = None
 
 
+class Mixer:
+    """Addiert mehrere Stimmen in einen Audio-Stream (oder rendert offline)."""
+
+    def __init__(self, synths, sr=48000, block=256):
+        self.synths, self.sr, self.block = synths, sr, block
+        self._stream = None
+
+    def render(self, frames):
+        out = sum(s.render(frames) for s in self.synths)
+        return np.clip(out, -1.0, 1.0).astype(np.float32)
+
+    def start(self, device=None):
+        import sounddevice as sd
+
+        def cb(outdata, frames, time_info, status):
+            outdata[:] = self.render(frames)
+
+        self._stream = sd.OutputStream(samplerate=self.sr, blocksize=self.block, channels=2,
+                                       dtype="float32", callback=cb, device=device)
+        self._stream.start()
+
+    def stop(self):
+        if self._stream is not None:
+            self._stream.stop()
+            self._stream.close()
+            self._stream = None
+
+
 class BallSound:
     """Uebersetzt Ball-Position und -Geschwindigkeit in Ton, Lautstaerke, Filter."""
 
     def __init__(self, width, height, max_speed=1500.0, min_speed=40.0, dir_threshold=60.0,
-                 cutoff_low=150.0, cutoff_high=8000.0):
+                 cutoff_low=150.0, cutoff_high=8000.0, notes=(NOTE_RIGHT, NOTE_LEFT), gain=0.35):
         self.w, self.h = width, height
         self.max_speed = max_speed        # px/s, ab hier volle Lautstaerke
         self.min_speed = min_speed        # px/s, darunter still
         self.dir_threshold = dir_threshold  # px/s, erst ab hier zaehlt eine Richtung
         self.cutoff_low, self.cutoff_high = cutoff_low, cutoff_high
-        self.synth = ToneSynth()
+        self.note_right, self.note_left = notes
+        self.synth = ToneSynth(gain=gain)
         self.direction = None             # "right" / "left"
         self.info = {}
 
@@ -126,7 +164,8 @@ class BallSound:
         if pos is None:
             self.synth.set(volume=0.0)
             self.direction = None
-            self.info = {"note": "-", "volume": 0.0, "cutoff": self.synth.cut_t, "speed": 0.0}
+            self.info = {"note": "-", "direction": None, "volume": 0.0,
+                         "cutoff": self.synth.cut_t, "speed": 0.0}
             return self.info
 
         x, y = pos
@@ -144,8 +183,9 @@ class BallSound:
         ty = float(np.clip(1.0 - y / self.h, 0.0, 1.0))
         cutoff = self.cutoff_low * (self.cutoff_high / self.cutoff_low) ** ty
 
-        name, freq = NOTE_RIGHT if self.direction != "left" else NOTE_LEFT
+        name, freq = self.note_right if self.direction != "left" else self.note_left
         self.synth.set(freq=freq, volume=volume, cutoff=cutoff)
-        self.info = {"note": name if self.direction else "-", "volume": volume,
+        self.info = {"note": name if self.direction else "-", "direction": self.direction,
+                     "volume": volume,
                      "cutoff": cutoff, "speed": speed}
         return self.info

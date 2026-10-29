@@ -1,11 +1,13 @@
 # Prototyp: Ball-Tracking per Kamera
 
-Eine Webcam verfolgt einen geworfenen Ball in Echtzeit, über seine Farbe (Standard: Grün). Position, Größe und Geschwindigkeit des Balls kommen pro Frame in einer Funktion an, aus der sich später Sounds auslösen lassen.
+Eine Webcam verfolgt **zwei** geworfene Bälle in Echtzeit, jeweils über ihre Farbe (Standard: Ball 1 Grün, Ball 2 Pink). Position, Größe und Geschwindigkeit jedes Balls kommen pro Frame in einer Funktion an, aus der sich Sounds auslösen lassen.
+
+Die Bälle brauchen **verschiedene Farben**. Dadurch bleibt Ball 1 immer Ball 1, auch wenn sich die Bälle kreuzen. Mit `--balls 1` läuft alles wie früher mit nur einem Ball.
 
 | Datei | Inhalt |
 |---|---|
 | `color_ball_tracking.py` | **Hauptscript:** Ball-Tracking über die Farbe, ohne Training, ohne GPU, mit Klang |
-| `ball_sound.py` | Klang: Richtung → Ton (G/A), Geschwindigkeit → Lautstärke, Höhe → Filter |
+| `ball_sound.py` | Klang: eine Stimme pro Ball. Richtung → Ton, Geschwindigkeit → Lautstärke, Höhe → Filter |
 | `camera_check.py` | findet heraus, welche Kamera-Nummer ein echtes Bild liefert |
 | `realtime_ball_tracking.py` | Alternative mit YOLO (KI-Modell), langsamer, erkennt beliebige Sportbälle |
 
@@ -41,22 +43,29 @@ python color_ball_tracking.py --source 1
 
 **Beim ersten Start kalibrieren:**
 
-1. Ball in die Kamera halten und **im Fenster auf den Ball klicken**. Damit wird genau seine Farbe übernommen.
-2. Mit **`m`** das Masken-Fenster öffnen: Weiß ist alles, was als Ball gilt. Die Regler so einstellen, dass möglichst nur der Ball weiß ist. Abgelehnte Flecken stehen grau im Bild, mit Grund („corners“ = eckig, „ragged“ = ausgefranst, „stretched“ = zu lang).
-3. Mit **`s`** speichern. Die Einstellung landet in `color_settings.json` und wird beim nächsten Start automatisch geladen.
+1. Beide Bälle in die Kamera halten. **Linksklick auf Ball 1**, **Rechtsklick auf Ball 2**. Damit wird jeweils genau die Farbe übernommen. (Alternativ: mit `b` den aktiven Ball wechseln, Linksklick gilt immer für den aktiven Ball. Er ist im Fenster umrandet.)
+2. Mit **`m`** das Masken-Fenster öffnen. Es zeigt die Maske des aktiven Balls: Weiß ist alles, was als dieser Ball gilt. Die Regler so einstellen, dass möglichst nur der Ball weiß ist. Mit `b` zum anderen Ball wechseln. Abgelehnte Flecken stehen grau im Bild, mit Grund („corners“ = eckig, „ragged“ = ausgefranst, „stretched“ = zu lang).
+3. Mit **`s`** speichern. Die Einstellung beider Bälle landet in `color_settings.json` und wird beim nächsten Start automatisch geladen. Eine alte Datei mit nur einem Ball wird für Ball 1 übernommen.
+
+Überschneiden sich die Farbbereiche der beiden Bälle, steht im Terminal eine Warnung. Dann können beide Tracker denselben Ball verfolgen.
 
 ## Klang
 
 Beim Start spielt das Script direkt Ton über die Lautsprecher:
 
+Jeder Ball hat seine eigene Stimme, beide klingen gleichzeitig.
+
+| Ball | Ball 1 | Ball 2 |
+|---|---|---|
+| fliegt nach **rechts** (x wird größer) | Ton **G** (392 Hz) | Ton **D** (587 Hz) |
+| fliegt nach **links** (x wird kleiner) | Ton **A** (440 Hz) | Ton **E** (659 Hz) |
+
 | Ball | Klang |
 |---|---|
-| fliegt nach **rechts** (x wird größer) | Ton **G** (392 Hz) |
-| fliegt nach **links** (x wird kleiner) | Ton **A** (440 Hz) |
 | Geschwindigkeit | Lautstärke: ruhender Ball ist still, ab 1500 px/s volle Lautstärke |
 | Höhe im Bild (y) | Filter: oben hell, unten dumpf |
 
-Es gibt nur diese zwei Töne, kein Gleiten dazwischen. Links oben im Fenster stehen x, y, vx, vy, Geschwindigkeit, der aktuelle Ton, die Lautstärke und die Filterfrequenz als Zahlen.
+Es gibt pro Ball nur diese zwei Töne, kein Gleiten dazwischen. Oben im Fenster steht pro Ball ein Feld mit x, y, vx, vy, Geschwindigkeit, dem aktuellen Ton, der Lautstärke und der Filterfrequenz.
 
 „Rechts“ heißt rechts im Kamerabild. Mit `--mirror` wird das Bild gespiegelt wie ein Spiegel, dann ist rechts auf dem Bildschirm auch deine rechte Seite.
 
@@ -65,10 +74,12 @@ Es gibt nur diese zwei Töne, kein Gleiten dazwischen. Links oben im Fenster ste
 | Taste | Funktion |
 |---|---|
 | `1` / `2` / `3` | Version umschalten (auch per Regler oben im Fenster) |
-| Klick auf den Ball | Farbe übernehmen |
-| `m` | Maske, Regler und Debug-Ansicht ein/aus |
-| `s` | Farbeinstellung speichern |
-| `r` | zurück auf Standard-Grün |
+| `b` / `Tab` | aktiven Ball wechseln (für Klick, Regler und `r`) |
+| Linksklick auf einen Ball | Farbe für den aktiven Ball übernehmen |
+| Rechtsklick auf einen Ball | Farbe für Ball 2 übernehmen |
+| `m` | Maske (aktiver Ball), Regler und Debug-Ansicht ein/aus |
+| `s` | Farbeinstellung beider Bälle speichern |
+| `r` | aktiven Ball auf seine Standardfarbe zurücksetzen |
 | `q` / `Esc` | beenden |
 
 ## Versionen
@@ -85,7 +96,7 @@ Standard ist v3. Mit `--version 2` startet eine andere.
 
 | Farbe | Bedeutung |
 |---|---|
-| Grün | Ball sichtbar |
+| Grün | Ball sichtbar (die Zahl daneben sagt, welcher Ball) |
 | Cyan | Ball teilweise verdeckt, Mitte aus dem sichtbaren Rand berechnet |
 | Rot | Ball kurz nicht sichtbar, Position aus der Flugbahn vorhergesagt |
 | Orange | Ball verschwunden, vermutlich in der Hand |
@@ -95,6 +106,7 @@ Standard ist v3. Mit `--version 2` startet eine andere.
 | Option | Bedeutung |
 |---|---|
 | `--source 1` | Kamera-Nummer oder Pfad zu einer Videodatei |
+| `--balls 2` | Anzahl Bälle (1 oder 2) |
 | `--version 3` | Start-Version (1, 2 oder 3) |
 | `--strictness 0.7` | wie streng die Formprüfung ist (0..1). Höher = weniger Fehlalarme, aber verdeckte/verschmierte Bälle gehen eher verloren. Auch als Regler im Masken-Fenster. |
 | `--hold-seconds 2` | wie lange ein Ball in der Hand gehalten wird |
@@ -107,7 +119,7 @@ Standard ist v3. Mit `--version 2` startet eine andere.
 
 ## Eigene Logik einbauen
 
-In `color_ball_tracking.py` steht oben die Funktion `on_ball()`. Sie wird pro Frame aufgerufen, solange ein Ball verfolgt wird, mit Position `x, y`, Radius (größer = näher an der Kamera), Geschwindigkeit `vx, vy` in Pixel pro Sekunde und `detected` (gesehen oder nur vorhergesagt). Dort lassen sich z. B. OSC-Nachrichten verschicken oder Töne auslösen. Wechselt `vy` das Vorzeichen, hat der Ball den höchsten Punkt erreicht oder ist aufgeprallt.
+In `color_ball_tracking.py` steht oben die Funktion `on_ball()`. Sie wird pro Frame und Ball aufgerufen, solange der Ball verfolgt wird, mit der Ball-Nummer `ball` (0 = Ball 1, 1 = Ball 2), Position `x, y`, Radius (größer = näher an der Kamera), Geschwindigkeit `vx, vy` in Pixel pro Sekunde und `detected` (gesehen oder nur vorhergesagt). Dort lassen sich z. B. OSC-Nachrichten verschicken oder Töne auslösen. Wechselt `vy` das Vorzeichen, hat der Ball den höchsten Punkt erreicht oder ist aufgeprallt.
 
 ## Tipps
 
