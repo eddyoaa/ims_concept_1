@@ -159,8 +159,9 @@ class BallSound:
         self.direction = None             # "right" / "left"
         self.info = {}
 
-    def update(self, pos, vx, vy):
-        """pos=None: kein Ball -> Stille. Gibt die aktuellen Werte fuers HUD zurueck."""
+    def update(self, pos, vx, vy, vz=0.0):
+        """pos=None: kein Ball -> Stille. vz: Tiefen-Geschwindigkeit (zweite Kamera), zaehlt
+        bei der Lautstaerke mit. Gibt die aktuellen Werte fuers HUD zurueck."""
         if pos is None:
             self.synth.set(volume=0.0)
             self.direction = None
@@ -175,7 +176,7 @@ class BallSound:
         elif vx < -self.dir_threshold:
             self.direction = "left"
 
-        speed = float(np.hypot(vx, vy))
+        speed = float(np.sqrt(vx * vx + vy * vy + vz * vz))
         t = (speed - self.min_speed) / (self.max_speed - self.min_speed)
         volume = float(np.clip(t, 0.0, 1.0)) if self.direction else 0.0
 

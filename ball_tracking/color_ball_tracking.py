@@ -80,8 +80,8 @@ COL_HIDDEN = (0, 165, 255)
 # SETTINGS (command line)
 # ============================================================
 
-def parse_args():
-    p = argparse.ArgumentParser(description="Real-time ball tracking by color")
+def build_parser(description="Real-time ball tracking by color"):
+    p = argparse.ArgumentParser(description=description)
     p.add_argument("--source", default="0", help="Camera index (0, 1, ...) or video file. Default: 0")
     p.add_argument("--version", type=int, default=3, choices=[1, 2, 3],
                    help="Detection version to start with (switch live with keys 1/2/3). Default: 3")
@@ -108,7 +108,11 @@ def parse_args():
     p.add_argument("--max-speed", type=float, default=1500.0,
                    help="Ball speed in px/s that gives full volume. Default: 1500")
     p.add_argument("--no-show", action="store_true", help="Run without a window (for testing)")
-    return p.parse_args()
+    return p
+
+
+def parse_args():
+    return build_parser().parse_args()
 
 
 # ============================================================
@@ -180,26 +184,26 @@ def on_ball(ball, frame_idx, x, y, radius, vx, vy, detected):
 # COLOR SETTINGS
 # ============================================================
 
-def load_settings():
+def load_settings(path=SETTINGS_FILE):
     """Color settings for both balls. Old files with only one ball are used for ball 1."""
     out = [dict(d) for d in DEFAULT_BALLS]
-    if os.path.exists(SETTINGS_FILE):
+    if os.path.exists(path):
         try:
-            with open(SETTINGS_FILE) as f:
+            with open(path) as f:
                 data = json.load(f)
             balls = data["balls"] if "balls" in data else [data]
             for i, s in enumerate(balls[:len(out)]):
                 out[i] = {**DEFAULT_BALLS[i], **s}
-            print(f"Loaded color settings from {SETTINGS_FILE}")
+            print(f"Loaded color settings from {path}")
         except Exception as e:
-            print(f"Could not read {SETTINGS_FILE} ({e}), using default colors")
+            print(f"Could not read {path} ({e}), using default colors")
     return out
 
 
-def save_settings(all_settings):
-    with open(SETTINGS_FILE, "w") as f:
+def save_settings(all_settings, path=SETTINGS_FILE):
+    with open(path, "w") as f:
         json.dump({"balls": all_settings}, f, indent=2)
-    print(f"Saved color settings of {len(all_settings)} balls to {SETTINGS_FILE}")
+    print(f"Saved color settings of {len(all_settings)} balls to {path}")
 
 
 def colors_overlap(a, b):

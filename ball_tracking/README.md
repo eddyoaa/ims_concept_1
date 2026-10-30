@@ -8,6 +8,7 @@ Die Bälle brauchen **verschiedene Farben**. Dadurch bleibt Ball 1 immer Ball 1,
 |---|---|
 | `color_ball_tracking.py` | **Hauptscript:** Ball-Tracking über die Farbe, ohne Training, ohne GPU, mit Klang |
 | `ball_sound.py` | Klang: eine Stimme pro Ball. Richtung → Ton, Geschwindigkeit → Lautstärke, Höhe → Filter |
+| `multicam_ball_tracking.py` | zwei Kameras (vorne + seitlich): Tiefe (z) und Ausfallsicherheit, wenn ein Ball in einer Kamera verdeckt ist |
 | `camera_check.py` | findet heraus, welche Kamera-Nummer ein echtes Bild liefert |
 | `realtime_ball_tracking.py` | Alternative mit YOLO (KI-Modell), langsamer, erkennt beliebige Sportbälle |
 
@@ -127,6 +128,46 @@ In `color_ball_tracking.py` steht oben die Funktion `on_ball()`. Sie wird pro Fr
 - **Knallige Ballfarbe**, die sonst nirgends im Raum vorkommt (Neongrün, Pink, Orange).
 - Mit `--save test.mp4` aufnehmen und danach in Ruhe mit `--source test.mp4` und verschiedenen Versionen vergleichen.
 - Klang an einer Videodatei testen: `python color_ball_tracking.py --source test.mp4 --save out.mp4 --audio-out out.wav`, dann beides zusammenlegen mit `ffmpeg -i out.mp4 -i out.wav -c:v libx264 -c:a aac -shortest demo.mp4`.
+
+## Zwei Kameras: Tiefe und Verdeckung
+
+`multicam_ball_tracking.py` nimmt eine zweite Kamera dazu, die von der **Seite** auf die Szene schaut, ungefähr im rechten Winkel zur vorderen:
+
+| Kamera | liefert |
+|---|---|
+| vorne (`--source`) | x (links/rechts) und y (Höhe) |
+| seitlich (`--side`) | z (Tiefe: nah/fern von der vorderen Kamera) und y |
+
+```bash
+python camera_check.py                                      # beide Kamera-Nummern finden
+python multicam_ball_tracking.py --source 0 --side 1
+```
+
+**Einrichten:**
+
+1. Beide Kameras so aufstellen, dass sie den ganzen Wurfbereich sehen. Die Seitenkamera möglichst im rechten Winkel zur vorderen.
+2. Im Fenster (links vorne, rechts seitlich) jeden Ball **in beiden Bildern** anklicken: Linksklick = aktiver Ball, Rechtsklick = Ball 2. Jede Kamera hat ihre eigenen Farbeinstellungen, weil Licht und Weißabgleich verschieden sind.
+3. Die Bälle ein paar Sekunden **auf und ab** bewegen. Dabei gleicht das Script die Höhe der beiden Kameras automatisch ab. Fertig ist es, wenn unten „y sync: ok“ steht. Eine Kalibrierung mit Schachbrett ist nicht nötig.
+4. Ball auf die vordere Kamera zu bewegen: z sollte kleiner werden. Wird es größer, mit `--side-flip` neu starten.
+5. `s` speichert die Farben: vorne in `color_settings.json`, seitlich in `color_settings_side.json`.
+
+**Was passiert bei Verdeckung:** Verliert eine Kamera einen Ball (z. B. Hand davor), übernimmt die andere. Die Höhe läuft dann weiter mit, der Ton auch. Nur die Koordinate, die allein die verdeckte Kamera misst (x oder z), wird auf dem letzten Wert gehalten. Im Feld „seen by“ steht, welche Kamera den Ball gerade sieht.
+
+**Anzeige:** unten pro Ball x, y, z (jeweils 0 bis 1) und die Klangwerte, rechts eine **Draufsicht** (x/z) mit beiden Bällen.
+
+**Klang:** wie beim Script mit einer Kamera. Die Lautstärke rechnet jetzt auch die Bewegung in die Tiefe mit. Ein Ball, der direkt auf die vordere Kamera zufliegt, bleibt also nicht mehr stumm. Wofür z sonst klingen soll, kann man in `on_ball_3d()` (oben im Script) selbst einbauen.
+
+**Tasten:** wie oben, zusätzlich `c` = aktive Kamera wechseln (für Maske, Regler und `r`).
+
+**Optionen:** dieselben wie oben, dazu:
+
+| Option | Bedeutung |
+|---|---|
+| `--side 1` | Seitenkamera (Nummer oder Videodatei) |
+| `--side-flip` | Tiefenrichtung umdrehen |
+| `--side-mirror` | Bild der Seitenkamera spiegeln |
+
+**Grenzen:** Perspektive wird ignoriert. Die Werte sind „grobes 3D“: gut zum Steuern von Klang, nicht zum Messen. Die Kameras nehmen nicht exakt gleichzeitig auf; das Script verschiebt jede Position entlang der Flugbahn auf denselben Zeitpunkt. Bei zwei Webcams an einem USB-Anschluss kann die Bildrate sinken. Dann die Kameras an verschiedene Anschlüsse stecken.
 
 ## YOLO-Variante
 

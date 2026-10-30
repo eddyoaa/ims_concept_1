@@ -38,7 +38,10 @@ for idx in range(5):
 print()
 if found:
     print(f"Working camera(s): {found}  (snapshots saved as camera_<index>.jpg)")
-    print(f"Start the tracker with:  python realtime_ball_tracking.py --source {found[0]}")
+    print(f"Start the tracker with:  python color_ball_tracking.py --source {found[0]}")
+    if len(found) >= 2:
+        print(f"Two cameras (depth):     python multicam_ball_tracking.py --source {found[0]} --side {found[1]}")
+        print("  (check camera_<index>.jpg to see which one is the front and which the side camera)")
 else:
     print("No camera delivered a real image. Check:")
     print("  - System Settings > Privacy & Security > Camera: allow your Terminal app, then restart it")
