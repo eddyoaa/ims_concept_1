@@ -130,8 +130,7 @@ def main():
 
     # Speed in ball radii per second: the same for near and far cameras.
     speeds = [np.hypot(np.gradient(c["u"]), np.gradient(c["v"])) * fps / c["r"] for c in cams.values()]
-    with np.errstate(all="ignore"):
-        with warnings.catch_warnings():
+    with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)      # frames no camera sees
         speed = np.nanmedian(np.array(speeds), axis=0)
     speed = np.convolve(fill(speed, int(fps)), np.ones(3) / 3, "same")

@@ -1,4 +1,4 @@
-time_s,timecode,frame,cue,velocity
+time_s,mm:ss:frames,frame,cue,velocity
 0.751,00:00:18,18,Wurf 1: Ball fliegt los,91
 1.293,00:01:07,31,Wurf 1: höchster Punkt,
 2.085,00:02:02,50,Wurf 1: Ball gefangen,
