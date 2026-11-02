@@ -1,0 +1,40 @@
+time_s,mm:ss:frames,frame,cue,velocity
+0.751,00:00:18,18,Wurf 1: Ball fliegt los,91
+1.293,00:01:07,31,Wurf 1: höchster Punkt,
+2.085,00:02:02,50,Wurf 1: Ball gefangen,
+2.669,00:02:16,64,Wurf 2: Ball fliegt los,95
+3.295,00:03:07,79,Wurf 2: höchster Punkt,
+3.712,00:03:17,89,Wurf 2: Ball gefangen,
+3.962,00:03:23,95,Wurf 3: Ball fliegt los,104
+4.796,00:04:19,115,Wurf 3: höchster Punkt,
+5.547,00:05:13,133,Wurf 3: Ball gefangen,
+5.714,00:05:17,137,Wurf 4: Ball fliegt los,102
+6.215,00:06:05,149,Wurf 4: höchster Punkt,
+6.798,00:06:19,163,Wurf 4: Ball gefangen,
+7.090,00:07:02,170,Wurf 5: Ball fliegt los,95
+7.591,00:07:14,182,Wurf 5: höchster Punkt,
+8.300,00:08:07,199,Wurf 5: Ball gefangen,
+8.592,00:08:14,206,Wurf 6: Ball fliegt los,82
+9.134,00:09:03,219,Wurf 6: höchster Punkt,
+9.509,00:09:12,228,Wurf 6: Ball gefangen,
+10.344,00:10:08,248,Wurf 7: Ball fliegt los,97
+10.844,00:10:20,260,Wurf 7: höchster Punkt,
+11.678,00:11:16,280,Wurf 7: Ball gefangen,
+11.845,00:11:20,284,Wurf 8: Ball fliegt los,104
+12.429,00:12:10,298,Wurf 8: höchster Punkt,
+13.055,00:13:01,313,Wurf 8: Ball gefangen,
+15.766,00:15:18,378,Wurf 9: Ball fliegt los,47
+15.891,00:15:21,381,Wurf 9: höchster Punkt,
+16.183,00:16:04,388,Wurf 9: Ball gefangen,
+16.975,00:16:23,407,Wurf 10: Ball fliegt los,56
+16.975,00:16:23,407,Wurf 10: höchster Punkt,
+17.309,00:17:07,415,Wurf 10: Ball gefangen,
+32.157,00:32:04,771,Wurf 11: Ball fliegt los,85
+32.616,00:32:15,782,Wurf 11: höchster Punkt,
+33.116,00:33:03,794,Wurf 11: Ball gefangen,
+33.492,00:33:12,803,Wurf 12: Ball fliegt los,78
+33.992,00:33:24,815,Wurf 12: höchster Punkt,
+34.701,00:34:17,832,Wurf 12: Ball gefangen,
+34.910,00:34:22,837,Wurf 13: Ball fliegt los,88
+35.410,00:35:10,849,Wurf 13: höchster Punkt,
+35.869,00:35:21,860,Wurf 13: Ball gefangen,

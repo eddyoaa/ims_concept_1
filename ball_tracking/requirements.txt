@@ -2,5 +2,6 @@ opencv-python
 numpy
 scipy
 sounddevice
+mido
 # nur für realtime_ball_tracking.py (YOLO):
 # ultralytics

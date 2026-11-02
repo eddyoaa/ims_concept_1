@@ -1,0 +1,35 @@
+Ergebnisse zur Aufnahme "Video cutting" (Ball als Instrument)
+=============================================================
+
+kontrolle.mp4    Alle drei Kameras nebeneinander, der erkannte Ball markiert.
+                 Unten: aktueller MIDI-Cue und die CC-Werte. Zum Prüfen, ob alles stimmt.
+
+ball_cues.mid    MIDI-Cues zum Video. In der DAW: 120 BPM, Datei an Takt 1, Video bei 0:00.
+                 Kanal 1:
+                   Note C3 (48)  Wurf: an beim Abwurf, aus beim Fangen (Anschlag = Wurftempo)
+                   Note D3 (50)  höchster Punkt des Wurfs
+                   Note E3 (52)  Ball gefangen
+                   CC 16 x (links -> rechts von vorne gesehen)
+                   CC 17 Höhe (oben = 127)
+                   CC 18 Tiefe (weg von der vorderen Kamera = 127)
+                   CC 7  Geschwindigkeit
+                   Marker "Wurf 1" ... "Wurf 13"
+
+cues.csv         Die Cues als Liste: Zeit, mm:ss:Bild, Bildnummer, was passiert.
+
+balls_3d.csv     Datensatz: Ballposition im Raum pro Bild (x, y, z, Geschwindigkeit,
+                 welche Kameras ihn sehen). Einheit: Ballradien. y = Höhe nach oben,
+                 z = weg von der vorderen Kamera.
+
+tracks_2d.csv    Rohdaten: Ballposition in jeder Kamera in Pixeln.
+
+ueberblick.png   Grafik: Position über die Zeit, Grundriss, Ansicht von vorne.
+
+Hinweise
+- Wurf 9 (15,8 s) ist wahrscheinlich kein Wurf: L läuft mit dem Ball. In der DAW löschen.
+- Wurf 10 (17,0 s) ist echt, aber verkürzt, weil L die vordere Kamera verdeckt.
+- Wurfbeginn kann bis ca. 0,3 s zu früh liegen (Ausholbewegung zählt mit).
+- 3D-Daten nur aus vorderer + seitlicher Kamera; die Deckenkamera passte geometrisch nicht.
+- Neu erzeugen: im Ordner ball_tracking
+    python analyze_videos.py "../Video cutting" --balls 1 --video
+    python make_midi.py "../Video cutting"

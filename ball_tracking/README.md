@@ -11,6 +11,7 @@ Die Bälle brauchen **verschiedene Farben**. Dadurch bleibt Ball 1 immer Ball 1,
 | `multicam_ball_tracking.py` | zwei Kameras (vorne + seitlich): Tiefe (z) und Ausfallsicherheit, wenn ein Ball in einer Kamera verdeckt ist |
 | `camera_check.py` | findet heraus, welche Kamera-Nummer ein echtes Bild liefert |
 | `sync_videos.py` | synchronisiert Aufnahmen mehrerer Kameras (z. B. Mac + 2 iPhones) über den Ton |
+| `make_midi.py` | MIDI-Cues zum Video aus der Auswertung (Würfe als Noten, x/y/z/Tempo als CC) |
 | `analyze_videos.py` | wertet synchronisierte Videos aus: Datensatz mit der Ballposition im Raum (x, y, z) pro Bild |
 | `realtime_ball_tracking.py` | Alternative mit YOLO (KI-Modell), langsamer, erkennt beliebige Sportbälle |
 
@@ -276,6 +277,33 @@ Die Kameras aus Schritt 1 werden gemerkt. `--ball-diameter` ist der Balldurchmes
 | `--min-radius 4` | kleinere Flecken ignorieren (für sehr kleine Bälle senken) |
 | `--keep-static` | Stellen mit Ballfarbe, die sich nie bewegen, nicht ausblenden |
 | `--no-perspective` | ohne Perspektivkorrektur (wenn die Ballgröße schlecht gemessen wird) |
+
+## MIDI-Cues zum Video
+
+Aus der Auswertung von `analyze_videos.py` macht `make_midi.py` eine MIDI-Datei, die genau zum Video passt:
+
+```bash
+python make_midi.py "../Video cutting"
+```
+
+Ergebnis in `analysis/`: `ball_cues.mid` und `cues.csv` (dieselben Cues als Liste mit Zeit und Bildnummer).
+
+**In der DAW:** Projekt auf **120 BPM** stellen, die MIDI-Datei an Takt 1 legen, das Video bei 0:00. Dann sitzt jeder Cue auf dem richtigen Bild.
+
+Alles auf MIDI-Kanal 1, mit denselben CCs wie `beschleunigung/midi.py`:
+
+| MIDI | Bedeutung |
+|---|---|
+| Note C3 (48) | Wurf: an, wenn der Ball die Hand verlässt, aus beim Fangen. Anschlagstärke = wie schnell der Wurf ist |
+| Note D3 (50) | kurz am höchsten Punkt |
+| Note E3 (52) | kurz beim Fangen |
+| CC 16 | x (links → rechts aus Sicht der vorderen Kamera) |
+| CC 17 | Höhe (oben = 127) |
+| CC 18 | Tiefe (weg von der vorderen Kamera = 127) |
+| CC 7 | Geschwindigkeit des Balls (ruhig = 0) |
+| Marker | „Wurf 1“, „Wurf 2“, … in der Zeitleiste |
+
+Ein Wurf ist, wenn sich der Ball schneller als 12 Ballradien pro Sekunde bewegt (gehalten: 0–10, fliegend: 20–60). Wird zu viel oder zu wenig als Wurf erkannt, `--threshold` anpassen (z. B. `--threshold 15`). Mit `--min-flight 0.4` fallen kurze Bewegungen weg, z. B. wenn jemand mit dem Ball läuft.
 
 ## YOLO-Variante
 
