@@ -5,28 +5,28 @@
       "angle_to_front_deg": 0.0,
       "looks_down_deg": 0.0,
       "axis_lengths": [
-        0.985,
-        0.969
+        0.991,
+        0.983
       ],
-      "axes_angle_deg": 90.3,
-      "median_error": 0.255,
-      "frames_used": 543
+      "axes_angle_deg": 89.2,
+      "median_error": 0.668,
+      "frames_used": 611
     },
     "side": {
-      "angle_to_front_deg": 70.6,
-      "looks_down_deg": 1.1,
+      "angle_to_front_deg": 55.9,
+      "looks_down_deg": 5.3,
       "axis_lengths": [
-        1.013,
-        1.026
+        1.008,
+        1.016
       ],
-      "axes_angle_deg": 90.5,
-      "median_error": 0.256,
-      "frames_used": 704
+      "axes_angle_deg": 90.6,
+      "median_error": 0.627,
+      "frames_used": 755
     }
   },
   "pair_errors_with_front": {
-    "side": 0.256,
-    "top": 1.711
+    "side": 0.668,
+    "top": 1.697
   },
   "used_for_3d": [
     "front",
