@@ -20,6 +20,7 @@ python camera_check.py                                     # Kamera-Nummern find
 python color_ball_tracking.py --source 0                   # eine Kamera
 python multicam_ball_tracking.py --source 0 --side 1       # zwei Kameras (Tiefe)
 python sync_videos.py aufnahmen/take1                       # Videos mehrerer Geräte synchronisieren
+python analyze_videos.py "../Video cutting" --balls 1       # Datensatz: Ballposition im Raum
 ```
 
 Beim nächsten Mal reichen `cd ball_tracking` und `source .venv/bin/activate`. Steht `(.venv)` vor der Eingabezeile, ist alles bereit.

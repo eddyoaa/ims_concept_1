@@ -1,0 +1,43 @@
+{
+  "method": "affine structure from motion with perspective correction",
+  "cameras_found": {
+    "front": {
+      "angle_to_front_deg": 0.0,
+      "looks_down_deg": 0.0,
+      "axis_lengths": [
+        0.985,
+        0.969
+      ],
+      "axes_angle_deg": 90.3,
+      "median_error": 0.255,
+      "frames_used": 543
+    },
+    "side": {
+      "angle_to_front_deg": 70.6,
+      "looks_down_deg": 1.1,
+      "axis_lengths": [
+        1.013,
+        1.026
+      ],
+      "axes_angle_deg": 90.5,
+      "median_error": 0.256,
+      "frames_used": 704
+    }
+  },
+  "pair_errors_with_front": {
+    "side": 0.256,
+    "top": 1.711
+  },
+  "used_for_3d": [
+    "front",
+    "side"
+  ],
+  "units": "ball radii (use --ball-diameter to get meters)",
+  "axes": "x right (front camera view), y up, z away from the front camera",
+  "cameras": {
+    "front": "Video vorne.mp4",
+    "side": "Video Seite.mp4",
+    "top": "video oben.mp4"
+  },
+  "fps": 23.976023976023978
+}

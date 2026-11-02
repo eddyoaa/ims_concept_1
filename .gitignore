@@ -6,3 +6,4 @@ __pycache__/
 ball_tracking/*.pt
 ball_tracking/camera_*.jpg
 ball_tracking/aufnahmen/
+**/analysis/check_*.mp4

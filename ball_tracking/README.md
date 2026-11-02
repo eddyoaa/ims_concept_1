@@ -11,6 +11,7 @@ Die Bälle brauchen **verschiedene Farben**. Dadurch bleibt Ball 1 immer Ball 1,
 | `multicam_ball_tracking.py` | zwei Kameras (vorne + seitlich): Tiefe (z) und Ausfallsicherheit, wenn ein Ball in einer Kamera verdeckt ist |
 | `camera_check.py` | findet heraus, welche Kamera-Nummer ein echtes Bild liefert |
 | `sync_videos.py` | synchronisiert Aufnahmen mehrerer Kameras (z. B. Mac + 2 iPhones) über den Ton |
+| `analyze_videos.py` | wertet synchronisierte Videos aus: Datensatz mit der Ballposition im Raum (x, y, z) pro Bild |
 | `realtime_ball_tracking.py` | Alternative mit YOLO (KI-Modell), langsamer, erkennt beliebige Sportbälle |
 
 ---
@@ -220,6 +221,61 @@ python multicam_ball_tracking.py --source aufnahmen/take1/synced/mac.mp4 --side 
 Braucht `ffmpeg` (Mac: `brew install ffmpeg`).
 
 **Grenzen:** Eine Kamera mit 30 fps (z. B. die Mac-Kamera) liefert jedes Bild doppelt. Ihr Bild ist bis zu einem halben 30-fps-Bild (17 ms) ungenau, mehr gibt die Kamera nicht her.
+
+## Datensatz: Ballposition im Raum aus mehreren Videos
+
+`analyze_videos.py` nimmt synchronisierte Videos (gleicher Start, gleiche Bildrate, z. B. aus `sync_videos.py` oder sauber geschnitten) und berechnet für jedes Bild, wo der Ball im Raum ist.
+
+**Kameras:** `--front` ist Pflicht, dazu mindestens eine weitere (`--side` und/oder `--top`). Die Winkel müssen nicht stimmen: Das Script findet selbst heraus, wie die Kameras zueinander stehen. Der Ball ist das Kalibrierobjekt.
+
+**1. Farben wählen (einmal pro Aufnahme):**
+
+```bash
+python analyze_videos.py "../Video cutting" --front "Video vorne.mp4" --side "Video Seite.mp4" --top "video oben.mp4" --balls 1 --setup
+```
+
+Pro Kamera öffnet sich ein Fenster. Mit dem Regler „Frame“ zu einem Bild gehen, in dem der Ball gut zu sehen ist, und den Ball anklicken (Linksklick = Ball 1, Rechtsklick = Ball 2). Die Kreise zeigen, was erkannt wird. `m` öffnet die Maske mit Reglern, `n` speichert und geht zur nächsten Kamera.
+
+**2. Auswerten:**
+
+```bash
+python analyze_videos.py "../Video cutting" --balls 1 --ball-diameter 0.2 --video
+```
+
+Die Kameras aus Schritt 1 werden gemerkt. `--ball-diameter` ist der Balldurchmesser in Metern (nachmessen!). Dann ist der Datensatz in Metern, sonst in Ballradien. `--video` schreibt zusätzlich `check_<kamera>.mp4` mit den erkannten Bällen zum Kontrollieren.
+
+**Ergebnis** im Unterordner `analysis/`:
+
+| Datei | Inhalt |
+|---|---|
+| `balls_3d.csv` | **der Datensatz:** `frame, time_s, ball, x, y, z, vx, vy, vz, seen_by` |
+| `tracks_2d.csv` | Rohdaten pro Kamera in Pixeln (Position, Radius, Breite, Status) |
+| `mapping.json` | wie die Kameras gefunden wurden und wie gut sie zusammenpassen |
+| `ignored_<kamera>.png` | Stellen mit Ballfarbe, die sich nie bewegen (Sticker, Klebeband), werden ignoriert |
+
+**Koordinaten:** x = links → rechts aus Sicht der vorderen Kamera, y = Höhe (nach oben), z = Tiefe (weg von der vorderen Kamera). Der kleinste Wert der Aufnahme ist jeweils 0. `vx, vy, vz` sind Geschwindigkeiten pro Sekunde. Eine Zeile gibt es nur, wenn mindestens zwei Kameras den Ball sehen.
+
+**Im Terminal prüfen:** Unter „Cameras as found“ steht, in welchem Winkel jede Kamera zur vorderen steht und wie gut sie passt (`error` in Ballradien, unter 0.5 ist gut). Passt eine Kamera nicht zur vorderen, wird sie für 3D weggelassen und das wird gemeldet.
+
+**So funktioniert es:** Ein Ball, der doppelt so weit weg ist, sieht halb so groß aus und bewegt sich im Bild halb so weit. Teilt man den Abstand zur Bildmitte durch die Ballgröße, ist die Perspektive herausgerechnet. Dann findet das Script aus allen Bildern, in denen mehrere Kameras den Ball sehen, wo jede Kamera steht (affine „Structure from Motion“). Im Test mit künstlichen Würfen liegt das Ergebnis 2–3 cm neben der echten Flugbahn.
+
+**Aufnahme-Tipps für gute Daten:**
+- **Normales Objektiv (1x)**, nicht Ultraweitwinkel (0.5x). Am Bildrand verbiegt das Weitwinkel die Geometrie.
+- Der Ball sollte möglichst die **ganze Flugbahn** im Bild bleiben, auch oben. Ein Ball, der aus dem Bild fliegt oder am Rand angeschnitten ist, liefert falsche Werte.
+- Die Kameras sollten **möglichst verschiedene Richtungen** haben (z. B. 90° zueinander), dann ist die Tiefe genauer.
+- **Hohe Bildrate** (60 fps) und viel Licht gegen Bewegungsunschärfe.
+
+| Option | Bedeutung |
+|---|---|
+| `--front / --side / --top DATEI` | Videos der Kameras (Dateiname im Ordner) |
+| `--setup` | Farben wählen |
+| `--balls 1` | Anzahl Bälle (1 oder 2) |
+| `--ball-diameter 0.2` | Balldurchmesser in Metern → Datensatz in Metern |
+| `--video` | Kontrollvideos mit erkannten Bällen schreiben |
+| `--start 5 --end 20` | nur diesen Abschnitt (Sekunden) auswerten |
+| `--min-radius 4` | kleinere Flecken ignorieren (für sehr kleine Bälle senken) |
+| `--keep-static` | Stellen mit Ballfarbe, die sich nie bewegen, nicht ausblenden |
+| `--no-perspective` | ohne Perspektivkorrektur (wenn die Ballgröße schlecht gemessen wird) |
 
 ## YOLO-Variante
 
