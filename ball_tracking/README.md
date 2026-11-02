@@ -10,6 +10,7 @@ Die Bälle brauchen **verschiedene Farben**. Dadurch bleibt Ball 1 immer Ball 1,
 | `ball_sound.py` | Klang: eine Stimme pro Ball. Richtung → Ton, Geschwindigkeit → Lautstärke, Höhe → Filter |
 | `multicam_ball_tracking.py` | zwei Kameras (vorne + seitlich): Tiefe (z) und Ausfallsicherheit, wenn ein Ball in einer Kamera verdeckt ist |
 | `camera_check.py` | findet heraus, welche Kamera-Nummer ein echtes Bild liefert |
+| `sync_videos.py` | synchronisiert Aufnahmen mehrerer Kameras (z. B. Mac + 2 iPhones) über den Ton |
 | `realtime_ball_tracking.py` | Alternative mit YOLO (KI-Modell), langsamer, erkennt beliebige Sportbälle |
 
 ---
@@ -168,6 +169,57 @@ python multicam_ball_tracking.py --source 0 --side 1
 | `--side-mirror` | Bild der Seitenkamera spiegeln |
 
 **Grenzen:** Perspektive wird ignoriert. Die Werte sind „grobes 3D“: gut zum Steuern von Klang, nicht zum Messen. Die Kameras nehmen nicht exakt gleichzeitig auf; das Script verschiebt jede Position entlang der Flugbahn auf denselben Zeitpunkt. Bei zwei Webcams an einem USB-Anschluss kann die Bildrate sinken. Dann die Kameras an verschiedene Anschlüsse stecken.
+
+## Mit mehreren Geräten aufnehmen und synchronisieren
+
+Statt live kann man auch mit mehreren Geräten getrennt aufnehmen (z. B. Mac vorne, ein iPhone seitlich, eins an der Decke) und die Videos danach mit `sync_videos.py` zeitlich übereinanderlegen.
+
+**Aufnehmen:**
+
+1. iPhones: gleiche Bildrate (am besten 60 fps), **HDR-Video aus** (Einstellungen → Kamera → Video aufnehmen), Belichtung und Fokus sperren (lange aufs Bild tippen, „AE/AF-Sperre“), Stabilisierung „Erweitert“ und Action-Modus aus. Fest montieren.
+2. Mac: QuickTime → Ablage → Neue Videoaufnahme, **mit Mikrofon**.
+3. Alle Aufnahmen starten, dann **einmal laut klatschen**, so dass alle Kameras die Hände sehen. Noch besser: einen Ball auf den Boden fallen lassen. Am Ende noch einmal klatschen.
+
+**Synchronisieren:** Alle Videos einer Aufnahme in einen eigenen Ordner legen, z. B. `aufnahmen/take1/`. Die Dateinamen werden zu den Namen der Ausgaben, also am besten gleich sprechend benennen (`mac.mov`, `iphone_seite.mov`, `iphone_decke.mov`). Dann:
+
+```bash
+python sync_videos.py aufnahmen/take1
+```
+
+Das Script sucht das Klatschen in allen Tonspuren, schneidet alle Videos auf den gemeinsamen Teil und schreibt sie mit gleichem Start, gleicher Länge und gleicher Bildrate (60 fps) nach `aufnahmen/take1/synced/`:
+
+| Datei | Inhalt |
+|---|---|
+| `mac.mp4`, `iphone_seite.mp4`, ... | die synchronisierten Videos: Bild Nr. N ist in allen derselbe Moment |
+| `preview.mp4` | alle Kameras nebeneinander, zum Prüfen |
+| `offsets.json` | die gefundenen Zeitversätze |
+
+Im Terminal steht pro Video der Versatz und eine „confidence“. Steht dort `UNSURE`, wurde kein gemeinsames Geräusch gefunden: lauter klatschen oder `--window` erhöhen. Hat man am Ende auch geklatscht, prüft das Script dort, ob die Videos über die Zeit auseinanderlaufen.
+
+**Prüfen:** `preview.mp4` öffnen und Bild für Bild durch das Klatschen gehen (in QuickTime mit den Pfeiltasten). Die Hände sollten in allen Bildern im selben Bild zusammenkommen. Ist eine Kamera ein Bild daneben, mit `--shift` korrigieren (ein Bild bei 60 fps = 0.0167 s). Positiv = die Kamera zeigt alles ein Bild später:
+
+```bash
+python sync_videos.py aufnahmen/take1 --shift iphone_decke.mov=0.0167
+```
+
+Danach lassen sich die Videos direkt auswerten, z. B.:
+
+```bash
+python multicam_ball_tracking.py --source aufnahmen/take1/synced/mac.mp4 --side aufnahmen/take1/synced/iphone_seite.mp4
+```
+
+| Option | Bedeutung |
+|---|---|
+| `--fps 60` | Bildrate der Ausgaben |
+| `--ref mac.mov` | Referenzvideo (Standard: erstes nach Name) |
+| `--window 60` | so viele Sekunden am Anfang jedes Videos werden nach dem Klatschen durchsucht. Erhöhen, wenn die Kameras weit auseinander gestartet wurden. |
+| `--shift DATEI=SEKUNDEN` | Versatz einer Kamera von Hand korrigieren (mehrfach möglich) |
+| `--only-offsets` | nur Versätze bestimmen, keine Videos schreiben |
+| `--no-preview` | kein `preview.mp4` |
+
+Braucht `ffmpeg` (Mac: `brew install ffmpeg`).
+
+**Grenzen:** Eine Kamera mit 30 fps (z. B. die Mac-Kamera) liefert jedes Bild doppelt. Ihr Bild ist bis zu einem halben 30-fps-Bild (17 ms) ungenau, mehr gibt die Kamera nicht her.
 
 ## YOLO-Variante
 

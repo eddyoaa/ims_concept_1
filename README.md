@@ -19,6 +19,7 @@ pip install -r requirements.txt
 python camera_check.py                                     # Kamera-Nummern finden
 python color_ball_tracking.py --source 0                   # eine Kamera
 python multicam_ball_tracking.py --source 0 --side 1       # zwei Kameras (Tiefe)
+python sync_videos.py aufnahmen/take1                       # Videos mehrerer Geräte synchronisieren
 ```
 
 Beim nächsten Mal reichen `cd ball_tracking` und `source .venv/bin/activate`. Steht `(.venv)` vor der Eingabezeile, ist alles bereit.
