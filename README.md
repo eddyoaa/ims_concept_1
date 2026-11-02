@@ -1,124 +1,51 @@
-# Mouthesizer – Nachbau in drei Versionen
+# Ball als Instrument
 
-Nachbau von Michael Lyons' **Mouthesizer** (2003): Eine Kamera schaut auf den Mund,
-die Mundform steuert einen Synthesizer. Dazu zwei Erweiterungen auf das ganze
-Gesicht und den ganzen Körper.
+Geworfene Bälle machen Klang. Eine oder zwei Kameras verfolgen zwei farbige Bälle in Echtzeit. Flugrichtung, Geschwindigkeit, Höhe und Tiefe steuern einen Synthesizer.
 
-| Script | Tracking | Idee |
-|---|---|---|
-| `01_mouthesizer.py` | Mund (MediaPipe Face Landmarker) | Original: Mundhöhe → Filter-Cutoff, Mundbreite → Resonanz/Verzerrung, Mundöffnung → Lautstärke |
-| `02_face.py` | ganzes Gesicht (52 Mimik-Werte + Kopfhaltung) | Nicken spielt Töne, Lächeln, Augenbrauen, Backen, Blinzeln usw. formen den Klang |
-| `03_body.py` | ganzer Körper (MediaPipe Pose) | Handhöhen spielen zwei Stimmen, Bewegung macht laut, Stillstand ist Stille (à la *Very Nervous System*) |
+| Ordner | Inhalt |
+|---|---|
+| [`ball_tracking/`](ball_tracking/README.md) | **Hauptprojekt:** Ball-Tracking per Kamera mit Klang |
+| [`beschleunigung/`](beschleunigung/) | Prototyp: Ball mit Beschleunigungssensor (ESP8266, WLAN), Neigung und Bewegung als MIDI |
+| [`schwamm/`](schwamm/README.md) | Prototyp: nasser Schwamm als Sensor und Klangquelle |
 
-Alle drei erzeugen **selbst Klang** (eingebauter Synth in Python) und schicken
-**gleichzeitig alle Werte per OSC** raus, z. B. an TouchDesigner oder vvvv.
-
-## Installation
+## Schnellstart
 
 ```bash
+cd ball_tracking
 python3 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
+
+python camera_check.py                                     # Kamera-Nummern finden
+python color_ball_tracking.py --source 0                   # eine Kamera
+python multicam_ball_tracking.py --source 0 --side 1       # zwei Kameras (Tiefe)
 ```
 
-Beim ersten Start wird das passende MediaPipe-Modell automatisch nach `models/` geladen.
+Beim nächsten Mal reichen `cd ball_tracking` und `source .venv/bin/activate`. Steht `(.venv)` vor der Eingabezeile, ist alles bereit.
 
-## Starten
+Im Fenster jeden Ball einmal anklicken (Linksklick = Ball 1, Rechtsklick = Ball 2), damit seine Farbe übernommen wird, dann mit `s` speichern. Die ausführliche Anleitung steht in [`ball_tracking/README.md`](ball_tracking/README.md).
 
-```bash
-python 01_mouthesizer.py
-python 02_face.py
-python 03_body.py
-```
+## Was es kann
 
-Optionen (für alle drei gleich):
+- **Zwei Bälle** in verschiedenen Farben (Standard: Grün und Pink). Die Farbe sagt, welcher Ball welcher ist, auch wenn sie sich kreuzen.
+- **Verdeckung:** Ist ein Ball teilweise von der Hand verdeckt, stimmen Mitte und Größe trotzdem. Verschwindet er kurz, wird seine Position aus der Flugbahn vorhergesagt.
+- **Zwei Kameras** (optional): Eine vorne, eine seitlich, z. B. Mac und iPhone. Die zweite liefert die Tiefe und übernimmt, wenn ein Ball in der ersten verdeckt ist. Die Höhe beider Kameras wird automatisch abgeglichen.
+- **Klang:** Jeder Ball hat eine eigene Stimme.
 
-| Option | Bedeutung |
+| Ball | Klang |
 |---|---|
-| `--camera 1` | andere Kamera (oder Pfad zu einer Videodatei) |
-| `--no-audio` | kein eigener Sound, nur OSC (Klang kommt dann aus TD/vvvv) |
-| `--osc 127.0.0.1:9000` | OSC-Ziel (Standard) |
-| `--no-osc` | kein OSC |
-| `--audio-device NAME` | anderes Audio-Ausgabegerät |
-| `--no-mirror` | Kamerabild nicht spiegeln |
-| `--headless` | ohne Fenster (z. B. in der Installation) |
+| fliegt nach rechts / links | Ball 1: G / A, Ball 2: D / E |
+| Geschwindigkeit | Lautstärke (ruhender Ball ist still) |
+| Höhe im Bild | Filter (oben hell, unten dumpf) |
 
-Tasten im Fenster: `q` beenden, `c` Kalibrierung zurücksetzen,
-in Version 1 zusätzlich `1`–`8` für den Grundton.
+Eigene Klang- oder OSC-Logik lässt sich in `on_ball()` (eine Kamera) bzw. `on_ball_3d()` (zwei Kameras) einbauen.
 
-**Kalibrierung:** Die Wertebereiche starten mit Standardwerten und passen sich
-automatisch an, wenn jemand weiter geht (Mund weiter auf, Arme weiter auseinander).
-Kurz mal alles „ausreizen“, dann sitzt es. Bei einer neuen Person `c` drücken.
+## Dateien in `ball_tracking/`
 
-## Mappings
-
-### 1 · Mouthesizer
-| Geste | Klang |
+| Datei | Inhalt |
 |---|---|
-| Mundhöhe | Cutoff des resonanten Tiefpass („Wah“) |
-| Mundbreite | Resonanz + Verzerrung |
-| Mundfläche (Innenlippe) | Lautstärke – Mund zu = still |
-
-Der Mund wird rechts oben vergrößert eingeblendet, so wie Lyons' Kopfkamera ihn sah.
-
-### 2 · Gesicht
-| Geste | Klang |
-|---|---|
-| Kopf nicken (hoch/runter) | Tonhöhe (Moll-Pentatonik, 2 Oktaven) |
-| Kopf drehen | Panorama links/rechts |
-| Kopf neigen | Verstimmung / Chorus |
-| Kiefer öffnen | Lautstärke + Cutoff |
-| Lächeln | Resonanz + Quinte kommt dazu |
-| Augenbrauen hoch | Vibrato |
-| Backen aufblasen | Verzerrung |
-| Kussmund | Pulse-Welle (hohler Klang) |
-| Augen weit auf | Delay-Feedback |
-| Blinzeln | Pluck eine Oktave höher |
-
-### 3 · Körper
-| Geste | Klang |
-|---|---|
-| linke / rechte Hand hoch | Ton von Stimme 1 / Stimme 2 |
-| Hände auseinander | Cutoff (Arme auf = hell) |
-| Bewegungsenergie | Lautstärke (stillstehen = leise) |
-| Position links/rechts | Panorama |
-| in die Hocke | Sub-Bass + Verzerrung |
-| beide Hände über den Kopf | großer Delay-Raum |
-| schneller Handschlag | Pluck |
-
-## OSC-Adressen (für TouchDesigner / vvvv)
-
-Alle Werte sind Floats, die meisten 0..1. In TouchDesigner einfach ein
-**OSC In CHOP** auf Port `9000` anlegen, die Kanäle heißen dann wie die Adressen.
-
-- **Mund:** `/mouth/present`, `/mouth/height`, `/mouth/width`, `/mouth/area`
-- **Gesicht:** `/face/present`, `/face/jaw`, `/face/smile`, `/face/brows`, `/face/puff`,
-  `/face/pucker`, `/face/eyewide`, `/face/nod`, `/face/turn`, `/face/tilt`,
-  `/face/blink` (1 im Moment des Blinzelns), `/face/note_hz`,
-  `/face/pitch_deg`, `/face/yaw_deg`, `/face/roll_deg`
-- **Körper:** `/body/present`, `/body/left`, `/body/right`, `/body/spread`,
-  `/body/energy`, `/body/center`, `/body/crouch`, `/body/space`,
-  `/body/hit_l`, `/body/hit_r`, `/body/note1_hz`, `/body/note2_hz`
-
-Mit `--no-audio` wird Python zum reinen Sensor und der Klang (oder Visuals)
-entsteht komplett in TD/vvvv.
-
-## Aufbau
-
-```
-mouthesizer/synth.py    Synth: Saw/Pulse-Oszillatoren + Sub → resonanter Tiefpass
-                        → tanh-Drive → Plucks → Feedback-Delay → Stereo
-mouthesizer/common.py   Kamera-Schleife, Modell-Download, OSC, HUD, Mapping-Helfer
-01_mouthesizer.py       Version Mund
-02_face.py              Version Gesicht
-03_body.py              Version Körper
-```
-
-Eigene Mappings: In jedem Script steht in `process()` ein `synth.set(...)`-Block,
-dort lässt sich jede Geste auf jeden Parameter legen. Verfügbare Parameter stehen
-oben in `Synth.DEFAULTS`.
-
-## Referenz
-
-Michael J. Lyons, Michael Haehnel, Nobuji Tetsutani: *Designing, Playing, and
-Performing with a Vision-based Mouth Interface*, NIME 2003.
+| `color_ball_tracking.py` | Tracking über die Farbe mit einer Kamera, mit Klang |
+| `multicam_ball_tracking.py` | dasselbe mit zwei Kameras: x, y und z (Tiefe) |
+| `ball_sound.py` | Klang: eine Stimme pro Ball |
+| `camera_check.py` | findet heraus, welche Kamera-Nummern ein Bild liefern |
+| `realtime_ball_tracking.py` | Alternative mit YOLO (KI-Modell), ein Ball, langsamer |
